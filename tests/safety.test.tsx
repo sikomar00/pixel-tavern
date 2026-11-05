@@ -1,7 +1,7 @@
 // [안전] 시험: 코드 리뷰에서 찾은 위험(git 잠금·저장소 설정 실행, 파일 이름 속 제어 문자, 끝없는 재연결, 고아 재생기, 확인 없이 코드가 고쳐지는 정리 버튼)을 막은 것이 유지되는지.
 // 실제 Windows 동작(고아가 3.5초 안에 끝남, 5번 시도 뒤 포기)은 시험이 아니라 docs/review 의 실험 기록에 있다.
 import { expect, test } from 'claude-code/testing'
-import { PLAYER } from '../hooks/radio'
+import { MAX_TRIES, PLAYER, RETRY_WAIT_TICKS, SIGNATURE } from '../hooks/radio'
 import { ARMED_LABEL, BAND, COMMIT_LABEL, PANE, SIMPLIFY_LABEL, START, newSpy, world } from './kit'
 
 const STATUS = /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패|◇ 다른 채팅에서 재생 중)$/
@@ -151,5 +151,83 @@ test('[안전] 커밋과 정리는 한 번에 하나만 대기한다: 다른 쪽
   expect(spy.ran).toEqual([])
   await pane.press({ key: 'commit' })
   expect(spy.ran).toEqual(['commit-commands:commit']) // 정리는 실행되지 않았다
+  await pane.unmount()
+})
+
+test('[안전] 재생기: 다른 재생기를 끌 때는 표식과 실행 인자 서명이 둘 다 맞는 것만 대상으로 하고, 서명은 실제 실행 인자와 같다', async ($, on) => {
+  const clock = world(on)
+  const launched: string[][] = []
+
+  on('process.spawn', async function* (_, e) {
+    launched.push([...e.argv])
+    yield { stream: 'stdout', text: 'connecting\n' }
+    for (;;) {
+      await clock.sleep(500)
+      yield { stream: 'stdout', text: '.\n' }
+    }
+  })
+  await $.session.start(START)
+  await clock.settle()
+  const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
+
+  await banner.press({ key: 'music' })
+  const killLine = PLAYER.split('\n').find(line => line.includes('Stop-Process')) ?? ''
+
+  expect(killLine).toContain("-like '*pixel-tavern-radio*'") // 표식
+  expect(killLine).toContain(`-like '*${SIGNATURE}*'`) // 실행 인자 서명: 표식 글자만 든 다른 powershell은 건드리지 않는다
+  expect(launched[0]?.slice(1, -1).join(' ')).toBe(SIGNATURE) // 서명은 우리가 재생기를 띄우는 인자와 정확히 같아야 한다(어긋나면 이전 재생기를 못 끈다)
+  expect(launched[0]?.[0]).toBe('powershell.exe')
+  await banner.press({ key: 'music' })
+  await clock.advance(1000)
+  await banner.unmount()
+})
+
+test('[안전] 재생기: 재연결은 점점 길게 기다리고(15초·30초·60초·2분·2분), 한도는 그대로 5번이며, 다시 연결할 때마다 번호를 알린다', () => {
+  expect(PLAYER.indexOf('Open-Radio\n    Say "retry:')).toBeGreaterThan(0) // connecting(상태)을 먼저, retry(안내)를 그 뒤에: 안내가 상태 신호에 지워지지 않는다
+  expect(RETRY_WAIT_TICKS).toEqual([30, 60, 120, 240, 240])
+  expect(RETRY_WAIT_TICKS.every((ticks, i) => i === 0 || ticks >= (RETRY_WAIT_TICKS[i - 1] ?? 0))).toBe(true) // 줄어들지 않는다
+  expect(MAX_TRIES).toBe(5)
+  expect(PLAYER).toContain('$waits = @(30, 60, 120, 240, 240)')
+  expect(PLAYER).toContain('$still -ge $waits[$tries]') // 차례마다 다른 시간을 기다린다
+  expect(PLAYER).toContain('Say "retry:$($tries + 1)"') // 다시 연결할 때마다 몇 번째 시도인지 알린다
+  expect(PLAYER).toContain('$tries -ge 5') // 포기 한도
+})
+
+test('[상태] 음악: 다시 연결하는 중이면 몇 번째 시도인지 한 줄 보이고, 소리가 흐르면 사라진다', async ($, on) => {
+  const clock = world(on)
+
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout', text: 'connecting\n' }
+    await clock.sleep(1000)
+    yield { stream: 'stdout', text: 'connecting\nretry:2\n' } // 두 신호가 한 조각으로 와도
+    await clock.sleep(1000)
+    yield { stream: 'stdout', text: 'connecting\n' } // 따로 와도(상태 신호 다음에 안내) 안내가 지워지지 않는다
+    yield { stream: 'stdout', text: 'retry:3\n' }
+    await clock.sleep(1000)
+    yield { stream: 'stdout', text: 'playing\n' }
+    for (;;) {
+      await clock.sleep(500)
+      yield { stream: 'stdout', text: '.\n' }
+    }
+  })
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const note = async () => (await pane.find({ type: 'Text', text: /다시 연결하는 중이에요/ }))?.text
+  const status = async () => (await pane.find({ type: 'Text', text: STATUS }))?.text
+
+  await pane.press({ key: 'radio' })
+  expect(await status()).toBe('◌ 연결 중…')
+  expect(await note()).toBeUndefined() // 첫 연결은 "다시"가 아니다
+  await clock.advance(1000)
+  expect(await note()).toBe('방송에 다시 연결하는 중이에요(2/5번째 시도)')
+  expect(await status()).toBe('◌ 연결 중…')
+  await clock.advance(1000)
+  expect(await note()).toBe('방송에 다시 연결하는 중이에요(3/5번째 시도)')
+  await clock.advance(1000)
+  expect(await status()).toBe('● 재생 중')
+  expect(await note()).toBeUndefined() // 소리가 흐르면 안내는 사라진다
+  await pane.press({ key: 'radio' })
+  await clock.advance(1000)
   await pane.unmount()
 })
