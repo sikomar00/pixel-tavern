@@ -1,18 +1,21 @@
 import type { EngineInterface, Timer } from 'claude-code'
 
-import type { Mood, SceneId } from '../types'
+import type { Mood, RadioState, SceneId } from '../types'
 import { startRadio, stopRadio } from './radio'
 import { MODES, SCENES } from './scenes'
 import {
   currentSceneId,
   readArmed,
+  readFilesOpen,
   readGitInfo,
   readMood,
   refreshGit,
   readRadio,
   writeArmed,
+  writeFilesOpen,
   writeHidden,
   writeMood,
+  writeRadio,
   writeVolume,
 } from './state'
 import { isVolume } from './volume'
@@ -23,9 +26,9 @@ export const PANE_TITLE = '여관'
 export type QuickKey = 'review' | 'commit' | 'simplify'
 
 export const QUICK: { key: QuickKey; label: string; command: string }[] = [
-  { key: 'review', label: '리뷰', command: 'code-review' },
-  { key: 'commit', label: '커밋', command: 'commit-commands:commit' },
-  { key: 'simplify', label: '정리', command: 'simplify' },
+  { key: 'review', label: '코드 리뷰', command: 'code-review' },
+  { key: 'commit', label: '변경 커밋', command: 'commit-commands:commit' },
+  { key: 'simplify', label: '코드 정리', command: 'simplify' },
 ]
 
 const HELP_TOAST_MS = 9000
@@ -41,11 +44,15 @@ export type Actions = {
   toggleRadio: () => Promise<void>
   setVolume: (level: number) => Promise<void>
   explain: (text: string) => void
+  toggleFiles: () => Promise<void>
 }
 
 async function openPane($: EngineInterface, base: string): Promise<void> {
   await $.ui.open({ id: PANE_ID, title: PANE_TITLE, backgroundColor: base })
 }
+
+/** 방송이 켜지는 중이거나 나오는 중인가(꺼짐·실패는 아니다). */
+const isRunning = (state: RadioState): boolean => state === 'connecting' || state === 'playing'
 
 /** git 저장소가 아니면(null) 막지 않는다: 커밋 명령이 스스로 이유를 알려 준다. */
 async function hasChanges($: EngineInterface): Promise<boolean> {
@@ -90,7 +97,11 @@ async function saveMood($: EngineInterface, next: Mood): Promise<void> {
     await openPane($, SCENES[currentSceneId(next)].base)
   }
   // 음악이 켜져 있으면 새 장면의 방송으로 바꾼다.
-  if (currentSceneId(next) !== before && (await readRadio($)) !== 'off') await startRadio($, currentSceneId(next))
+  if (currentSceneId(next) === before) return
+  const radio = await readRadio($)
+
+  if (isRunning(radio)) await startRadio($, currentSceneId(next))
+  else if (radio === 'failed') await writeRadio($, 'off') // 옛 방송의 실패 표시는 장면을 바꾸면 지운다
 }
 
 export function makeActions($: EngineInterface): Actions {
@@ -121,14 +132,16 @@ export function makeActions($: EngineInterface): Actions {
     setHidden: hidden => writeHidden($, hidden),
     // "?"를 눌렀을 때: 마우스를 올릴 수 없는 경우(키보드)를 위해 같은 설명을 알림으로 띄운다.
     explain: text => $.ui.toast(text, { timeoutMs: HELP_TOAST_MS }),
+    toggleFiles: async () => writeFilesOpen($, !(await readFilesOpen($))),
     // 음량은 재생기를 켤 때 정해지므로, 켜져 있으면 새 음량으로 다시 켠다.
     setVolume: async level => {
       if (!isVolume(level)) return
       await writeVolume($, level)
-      if ((await readRadio($)) !== 'off') await startRadio($, currentSceneId(await readMood($)))
+      if (isRunning(await readRadio($))) await startRadio($, currentSceneId(await readMood($)))
     },
+    // 켜져 있으면 끄고, 꺼져 있거나 실패한 뒤라면 켠다(다시 시도).
     toggleRadio: async () =>
-      (await readRadio($)) === 'off' ? startRadio($, currentSceneId(await readMood($))) : stopRadio($),
+      isRunning(await readRadio($)) ? stopRadio($) : startRadio($, currentSceneId(await readMood($))),
     // 데스크톱은 file: 링크를 열어 주지 않는다. 프롬프트 칸에 @경로를 넣고, 칸이 없으면 경로를 알려 준다.
     mentionFile: async path => {
       const filled = await $.prompt.fill({ text: `@${path} `, mode: 'append' })

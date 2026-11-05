@@ -8,15 +8,17 @@ import type { BannerData } from './banner'
 import { shortPath, todayKey } from './format'
 import { helpMark } from './help'
 import { MODES, SCENES } from './scenes'
-import { clip } from './svg'
+import { WARN_COLOR, clip } from './svg'
 import { SPACE, chipOf, surfaceOf } from './theme'
 import type { Gap } from './theme'
 import { USAGE_HEIGHT, USAGE_WIDTH, usageSvg } from './usage'
 import { MAX_VOLUME } from './volume'
 
 export type PanelData = BannerData & {
+  radioNote: string
   today: Today
   chatFiles: string[]
+  isFilesOpen: boolean
   isCommitArmed: boolean
   volume: number
 }
@@ -24,16 +26,18 @@ export type PanelData = BannerData & {
 type Ui = Elements['desktop']
 
 /*
+ * 위에서 아래로: 장면(히어로) → 빠른 실행 → 사용량 → 작업 현황 → 만진 파일 → 음악.
+ * 자주 쓰는 것(실행·사용량)이 위에 오고, 음악은 배너의 ▶/■로 늘 켜고 끌 수 있어서 맨 아래에 둔다.
+ *
  * 글자 위계(4단계)
  *   머리글  body·semibold·강조색        구역의 이름
  *   주요    heading·semibold·밝은 글자   방송 이름, 프로젝트 이름, 숫자
  *   보조    body/footnote·흐린 글자      상태, 안내
  *   메타    caption·흐린 글자           커밋 로그, 개수
- * 구역(띠)은 전체 폭을 쓴다. 배경은 바탕과 카드(바탕보다 한 단계 밝음)가 번갈아 나온다:
- *   설정·그림(바탕) → 음악(카드) → 빠른 실행(바탕) → 사용량(카드) → 작업 현황(바탕) → 만진 파일(카드)
- * 설명은 화면에 늘어놓지 않고 머리글 오른쪽의 "?"에 둔다(help.tsx). 만진 파일은 작업 현황의 상세 영역이라 소제목을 쓴다.
+ * 카드(바탕보다 한 단계 밝은 배경)는 데이터를 담는 사용량과 만진 파일 목록에만 쓴다. 나머지는 바탕 위의 띠다.
+ * 설명은 화면에 늘어놓지 않고 필요한 머리글 오른쪽의 "?"에 둔다(help.tsx).
  */
-const MAX_FILES = 8
+const FILES_COLLAPSED = 4 // 파일 목록의 기본 노출 수(전체 보기를 누르면 모두)
 const SCENE_WIDTH = 340
 const SCENE_HEIGHT = 296 // 그림은 74줄까지(칸 4배)
 
@@ -121,67 +125,24 @@ const settings = (ui: Ui, d: PanelData, act: Actions) => {
   ])
 }
 
-const RADIO_STATUS: Record<RadioState, string> = { off: '○ 멈춤', connecting: '◌ 연결 중…', playing: '● 재생 중' }
-
-/** 음량 −/+ 와 현재 단계(●가 채운 칸). 켜져 있으면 새 음량으로 방송을 다시 연결한다. */
-const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Button, Text } = ui
-  const bars = '●'.repeat(d.volume) + '○'.repeat(MAX_VOLUME - d.volume)
-
-  return (
-    <Box flexDirection="row" alignItems="center" gap={SPACE.control}>
-      <Text color={d.scene.muted} size="footnote">
-        음량
-      </Text>
-      <Button key="volume-down" label="−" onPress={() => act.setVolume(d.volume - 1)} />
-      <Text>{bars}</Text>
-      <Button key="volume-up" label="+" onPress={() => act.setVolume(d.volume + 1)} />
-    </Box>
-  )
-}
-
-/** 영역 1: 음악 플레이어. 방송 이름(주요) · 상태(보조) · 조작(재생, 음량). 설명은 "?"에. */
-const music = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Button, Text } = ui
-  const isOn = d.radio !== 'off'
-
-  return band(ui, surfaceOf(d.scene), [
-    inset(ui, [header(ui, d, '음악', [helpMark(ui, { scene: d.scene, act, id: 'music' })])]),
-    inset(ui, [
-      <Text size="heading" weight="semibold">
-        {d.scene.music.label}
-      </Text>,
-      <Text color={isOn ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
-        {RADIO_STATUS[d.radio]}
-      </Text>,
-    ]),
-    inset(ui, [
-      <Box flexDirection="row" alignItems="center" gap={SPACE.control} flexWrap="wrap">
-        <Button
-          key="radio"
-          variant={isOn ? 'secondary' : 'primary'}
-          label={isOn ? '■ 정지' : '▶ 재생'}
-          onPress={() => act.toggleRadio()}
-        />
-        {volumeControls(ui, d, act)}
-      </Box>,
-    ]),
-  ])
-}
-
-/** 영역 2: 빠른 실행. 버튼만 한 줄에 둔다. 커밋을 한 번 누르면 5초 동안 라벨이 "한 번 더"로 바뀌고 안내가 붙는다. */
+/** 영역 2: 빠른 실행. 버튼만 한 줄에 둔다. 커밋을 한 번 누르면 5초 동안 "한 번 더"로 바뀌고 안내가 붙는다. */
 const quick = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
-  const buttons = QUICK.map(({ key, label }) => (
-    <Button
-      key={key}
-      label={key === 'commit' && d.isCommitArmed ? `한 번 더: ${label}` : label}
-      onPress={() => act.quick(key)}
-    />
-  ))
+  const buttons = QUICK.map(({ key, label }) => {
+    const isArmed = key === 'commit' && d.isCommitArmed
+
+    return (
+      <Button
+        key={key}
+        variant={isArmed ? 'primary' : undefined}
+        label={isArmed ? '한 번 더' : label} // 라벨 길이가 같아야 줄이 흔들리지 않는다
+        onPress={() => act.quick(key)}
+      />
+    )
+  })
   const armed = [
     <Text color={d.scene.accent} weight="semibold" size="footnote">
-      5초 안에 누르면 실행돼요
+      5초 안에 한 번 더 누르면 변경을 커밋해요
     </Text>,
   ]
 
@@ -217,7 +178,7 @@ const usageNotes = (ui: Ui, d: PanelData) => {
       ]
 }
 
-/** 영역 2: 사용량 카드. 컨텍스트·5시간·주간을 원 3개로 한 줄에. 그림은 전체 폭으로 그려서 글자가 줄어들지 않게 한다. */
+/** 영역 2: 사용량 카드. 컨텍스트·5시간 한도·주간 한도를 원 3개로 한 줄에. 그림은 전체 폭으로 그려서 글자가 줄어들지 않게 한다. */
 const usage = (ui: Ui, d: PanelData, act: Actions) => {
   const { Svg } = ui
 
@@ -225,7 +186,7 @@ const usage = (ui: Ui, d: PanelData, act: Actions) => {
     inset(ui, [header(ui, d, '사용량', [helpMark(ui, { scene: d.scene, act, id: 'usage' })])]),
     <Svg
       source={usageSvg(d.scene, d.usage, d.now)}
-      alt="컨텍스트, 5시간, 주간 사용량. 원은 쓴 양이에요"
+      alt="컨텍스트, 5시간 한도, 주간 한도 사용량. 원은 쓴 양이에요"
       width={USAGE_WIDTH}
       height={USAGE_HEIGHT}
     />,
@@ -303,7 +264,7 @@ const counter = (ui: Ui, d: PanelData, value: number, label: string) => {
   )
 }
 
-/** 영역 3: 작업 현황. 프로젝트 이름(주요) · git 상태(칩) · 오늘의 숫자 세 칸. */
+/** 영역 3: 작업 현황. 프로젝트 이름(주요) · git 상태(칩) · 오늘 누적 숫자 세 칸. */
 const status = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Text } = ui
   const t = d.today.date === todayKey(d.now) ? d.today : { ...d.today, prompts: 0, actions: 0, files: [] }
@@ -318,7 +279,7 @@ const status = (ui: Ui, d: PanelData, act: Actions) => {
     ]),
     inset(ui, [
       <Text color={d.scene.muted} size="caption">
-        오늘
+        오늘 누적
       </Text>,
       <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
         {counter(ui, d, t.prompts, '프롬프트')}
@@ -329,37 +290,104 @@ const status = (ui: Ui, d: PanelData, act: Actions) => {
   ])
 }
 
-/** 영역 4: 이 채팅에서 만진 파일(프로젝트의 상세). 길면 가로로 넘치지 않게 잘라 낸다. */
+/**
+ * 영역 4: 이 채팅에서 만진 파일(프로젝트의 상세). 기본은 최근 4개, "전체 보기"로 모두 펼친다.
+ * 위 "수정 파일"(오늘 누적)과는 다른 값이라 제목과 개수에 "이 채팅"을 적는다. 길면 가로로 넘치지 않게 잘라 낸다.
+ */
 const files = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
   const recent = [...d.chatFiles].reverse()
-  const rows = recent.slice(0, MAX_FILES).map(path => (
+  const shown = d.isFilesOpen ? recent : recent.slice(0, FILES_COLLAPSED)
+  const rows = shown.map(path => (
     <Box overflow="hidden">
       <Button key={`file:${path}`} plain label={shortPath(path)} onPress={() => act.mentionFile(path)} />
     </Box>
   ))
-  const more = recent.length - MAX_FILES
-  const count = [
+  const toggle =
+    recent.length > FILES_COLLAPSED
+      ? [<Button key="files-toggle" plain label={d.isFilesOpen ? '접기' : `전체 보기 (${recent.length})`} onPress={() => act.toggleFiles()} />]
+      : []
+  const hint = [
     <Text color={d.scene.muted} size="caption">
-      {`${recent.length}개`}
+      누르면 프롬프트에 @경로로 들어가요
     </Text>,
   ]
 
   return band(ui, surfaceOf(d.scene), [
     inset(ui, [
       subheader(ui, d, '이 채팅에서 만진 파일', [
-        ...(recent.length === 0 ? [] : count),
-        helpMark(ui, { scene: d.scene, act, id: 'files' }),
+        <Text color={d.scene.muted} size="caption">
+          {`이 채팅 ${recent.length}개`}
+        </Text>,
       ]),
     ]),
     inset(ui, [
-      ...(rows.length === 0 ? [<Text color={d.scene.muted}>아직 없어요</Text>] : rows),
-      ...(more > 0 ? [<Text color={d.scene.muted}>외 {more}개</Text>] : []),
+      ...(rows.length === 0 ? [<Text color={d.scene.muted}>아직 없어요</Text>] : [...hint, ...rows]),
+      ...toggle,
     ]),
   ])
 }
 
-// 위에서 아래로: 환경(설정·그림·음악) → 작업 제어(빠른 실행·사용량) → 작업 현황(프로젝트·파일).
+const RADIO_STATUS: Record<RadioState, string> = {
+  off: '○ 멈춤',
+  connecting: '◌ 연결 중…',
+  playing: '● 재생 중',
+  failed: '✕ 연결 실패',
+}
+
+/** 음량 −/+ 와 현재 단계(●가 채운 칸). 켜져 있으면 새 음량으로 방송을 다시 연결한다. */
+const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
+  const { Box, Button, Text } = ui
+  const bars = '●'.repeat(d.volume) + '○'.repeat(MAX_VOLUME - d.volume)
+
+  return (
+    <Box flexDirection="row" alignItems="center" gap={SPACE.control}>
+      <Text color={d.scene.muted} size="footnote">
+        음량
+      </Text>
+      <Button key="volume-down" label="−" onPress={() => act.setVolume(d.volume - 1)} />
+      <Text>{bars}</Text>
+      <Button key="volume-up" label="+" onPress={() => act.setVolume(d.volume + 1)} />
+    </Box>
+  )
+}
+
+/**
+ * 영역 5: 음악 플레이어. 방송 이름(주요) · 상태(보조: 꺼짐/연결 중/재생 중/연결 실패) · 조작(재생·정지, 음량).
+ * 실패하면 이유가 한 줄 붙고 버튼이 "다시 시도"가 된다.
+ */
+const music = (ui: Ui, d: PanelData, act: Actions) => {
+  const { Box, Button, Text } = ui
+  const isRunning = d.radio === 'connecting' || d.radio === 'playing'
+  const isFailed = d.radio === 'failed'
+  const label = isRunning ? '■ 정지' : isFailed ? '▶ 다시 시도' : '▶ 재생'
+
+  return band(ui, d.scene.base, [
+    inset(ui, [header(ui, d, '음악', [helpMark(ui, { scene: d.scene, act, id: 'music' })])]),
+    inset(ui, [
+      <Text size="heading" weight="semibold" wrap="truncate-end">
+        {d.scene.music.label}
+      </Text>,
+      <Text color={isFailed ? WARN_COLOR : isRunning ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
+        {RADIO_STATUS[d.radio]}
+      </Text>,
+      ...(isFailed && d.radioNote !== ''
+        ? [
+            <Text color={d.scene.muted} size="caption">
+              {d.radioNote}
+            </Text>,
+          ]
+        : []),
+    ]),
+    inset(ui, [
+      <Box flexDirection="row" alignItems="center" gap={SPACE.control} flexWrap="wrap">
+        <Button key="radio" variant={isRunning ? 'secondary' : 'primary'} label={label} onPress={() => act.toggleRadio()} />
+        {volumeControls(ui, d, act)}
+      </Box>,
+    ]),
+  ])
+}
+
 export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Svg } = ui
   const percent = d.usage?.percent ?? null
@@ -375,11 +403,11 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
           height={SCENE_HEIGHT}
         />
       </Box>
-      {music(ui, d, act)}
       {quick(ui, d, act)}
       {usage(ui, d, act)}
       {status(ui, d, act)}
       {files(ui, d, act)}
+      {music(ui, d, act)}
     </Box>
   )
 }
