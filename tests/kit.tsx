@@ -6,7 +6,9 @@ export const NOON = Date.parse('2026-11-04T12:00:00')
 
 export const COMMIT_LABEL = QUICK.find(item => item.key === 'commit')?.label // 버튼 이름은 QUICK 한 곳에서만 정한다
 
-export const ARMED_LABEL = '한 번 더' // 커밋을 한 번 누른 5초 동안의 라벨
+export const SIMPLIFY_LABEL = QUICK.find(item => item.key === 'simplify')?.label
+
+export const ARMED_LABEL = '한 번 더' // 커밋·정리를 한 번 누른 5초 동안의 라벨
 
 export const BAND = {
   plugin: 'pixel-tavern',
