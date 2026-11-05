@@ -304,7 +304,11 @@ export function countAction($: EngineInterface): Promise<void> {
 }
 
 /** Claude가 이 채팅에서 고치거나 쓴 파일을 기록한다. */
-export async function trackFile($: EngineInterface, path: string): Promise<void> {
+export async function trackFile($: EngineInterface, rawPath: string): Promise<void> {
+  // 줄바꿈 같은 제어 문자가 든 이름은 엔진이 버튼 이름으로 그리지 못해 패널 전체가 사라진다(시험으로 확인). 프롬프트에 줄이 끼어드는 것도 함께 막힌다.
+  const path = rawPath.replace(/[\u0000-\u001f\u007f]/g, '')
+
+  if (path === '') return
   await update($, chatFiles, list => (list.includes(path) ? list : [...list, path].slice(-50)))
   await bumpToday($, t => ({ ...t, files: t.files.includes(path) ? t.files : [...t.files, path].slice(-500) }))
 }
