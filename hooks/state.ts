@@ -5,14 +5,14 @@ import type { GitInfo, Mood, QuickKey, RadioState, SceneId, Usage } from '../typ
 import { withoutControl } from './format'
 import { readGit } from './git'
 import { DEFAULT_MOOD, MODES, SCENES } from './scenes'
-import { addTouchedFile, syncStats } from './stats'
+import { addTouchedFile, setOwnProject, syncStats } from './stats'
 import { DEFAULT_VOLUME, isVolume } from './volume'
 
 // 엔진의 검사(claude plugin validate)는 atom을 읽고 쓰는 파일 안에서 atom을 찾는다.
 // 그래서 atom은 이 파일에만 두고, 바깥에는 `$`를 받는 함수로만 드러낸다.
 // 모양을 바꾸면 shape 태그를 올린다. 이전 버전이 저장한 값은 기본값으로 읽힌다.
-/** 접어 둔 구역(처음 한 번만 쓰는 기본값). art·usage·status·files·music은 구역, commits는 작업 현황의 커밋 로그, changes는 바뀐 파일 목록. */
-const DEFAULT_COLLAPSED: string[] = ['commits', 'changes']
+/** 접어 둔 구역(처음 한 번만 쓰는 기본값). art·usage·status·files·music은 구역, commits는 작업 현황의 커밋 로그, changes는 바뀐 파일 목록, projects는 프로젝트별 오늘. */
+const DEFAULT_COLLAPSED: string[] = ['commits', 'changes', 'projects']
 const mood = atom({ plugin: 'pixel-tavern', key: 'mood' } as const, DEFAULT_MOOD as Mood, { shape: 'mood-1' })
 const isHidden = atom({ plugin: 'pixel-tavern', key: 'isHidden' } as const, false)
 const isStill = atom({ plugin: 'pixel-tavern', key: 'isStill' } as const, false)
@@ -268,6 +268,7 @@ export async function writeUsage($: EngineInterface, next: Usage): Promise<void>
 
 export async function writeProject($: EngineInterface, name: string): Promise<void> {
   await update($, project, () => name)
+  await setOwnProject($, name) // 오늘 통계의 이 채팅 칸에도 프로젝트 이름을 남긴다
 }
 
 /** Claude가 이 채팅에서 고치거나 쓴 파일을 기록한다. */

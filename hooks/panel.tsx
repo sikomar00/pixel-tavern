@@ -1,6 +1,6 @@
 import type { Elements } from 'claude-code'
 
-import type { QuickKey, SceneId, Today, Work } from '../types'
+import type { ProjectToday, QuickKey, SceneId, Today, Work } from '../types'
 import type { Actions } from './actions'
 import { ART, composeScene } from './art'
 import type { BannerData } from './banner'
@@ -10,6 +10,7 @@ import { shortPath, todayKey } from './format'
 import { gitRows } from './gitrows'
 import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import { music } from './music'
+import { projectRows } from './projects'
 import { quick } from './quick'
 import { MODES, SCENES } from './scenes'
 import { stillSvg } from './still'
@@ -22,6 +23,7 @@ export type PanelData = BannerData & {
   isDiag: boolean
   frame: Frame
   today: Today
+  projects: ProjectToday[]
   chatFiles: string[]
   isFilesOpen: boolean
   armedKey: QuickKey | null
@@ -181,6 +183,7 @@ const status = (ui: Ui, d: PanelData, act: Actions) => {
               {counter(ui, d, t.actions, '도구 실행')}
               {counter(ui, d, t.files.length, '수정 파일')}
             </Box>,
+            ...projectRows(ui, d, act),
           ]),
         ]),
   ])

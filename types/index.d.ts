@@ -25,8 +25,14 @@ export type Work =
   | { phase: 'running'; key: QuickKey; turnId: string }
   | { phase: 'ended'; key: QuickKey; reason: TurnEnd; seconds: number }
 
-/** 오늘 통계. date가 오늘과 다르면 0부터 다시 센다. files는 경로가 아니라 경로의 짧은 지문이다(옛 합계 키에만 경로가 들어 있다). */
-export type Today = { date: string; prompts: number; actions: number; files: string[] }
+/**
+ * 오늘 통계. date가 오늘과 다르면 0부터 다시 센다. files는 경로가 아니라 경로의 짧은 지문이다(옛 합계 키에만 경로가 들어 있다).
+ * project는 이 칸을 쓴 채팅의 프로젝트 폴더 이름(경로가 아니다). 이 값이 생기기 전의 칸과 옛 합계 키에는 없다.
+ */
+export type Today = { date: string; prompts: number; actions: number; files: string[]; project?: string }
+
+/** 프로젝트(폴더 이름) 하나의 오늘 통계. 이름이 빈 글자면 프로젝트 이름이 없는 옛 기록이다. */
+export type ProjectToday = Today & { project: string }
 
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
 
@@ -62,6 +68,7 @@ declare module 'claude-code' {
       slot: string
       own: Shaped<Today>
       others: Shaped<Today>
+      projects: ProjectToday[]
       usage: Usage | null
       git: Shaped<GitInfo | null>
       model: string | null
