@@ -27,6 +27,7 @@ const volume = atom({ plugin: 'pixel-tavern', key: 'volume' } as const, DEFAULT_
 const isFilesOpen = atom({ plugin: 'pixel-tavern', key: 'isFilesOpen' } as const, false)
 const isMusicAvailable = atom({ plugin: 'pixel-tavern', key: 'isMusicAvailable' } as const, true)
 const openHelp = atom({ plugin: 'pixel-tavern', key: 'openHelp' } as const, '')
+const isDiag = atom({ plugin: 'pixel-tavern', key: 'isDiag' } as const, false)
 
 export const currentSceneId = (m: Mood): SceneId => m.sceneByMode[m.mode]
 
@@ -127,16 +128,17 @@ export async function readView($: EngineInterface) {
 }
 
 export async function readPanel($: EngineInterface) {
-  const [t, files, armed, level, isOpen, help] = await Promise.all([
+  const [t, files, armed, level, isOpen, help, diag] = await Promise.all([
     read($, today),
     read($, chatFiles),
     read($, isCommitArmed),
     read($, volume),
     read($, isFilesOpen),
     read($, openHelp),
+    read($, isDiag),
   ])
 
-  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level, isFilesOpen: isOpen, openHelp: help }
+  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level, isFilesOpen: isOpen, openHelp: help, isDiag: diag }
 }
 
 export function readHidden($: EngineInterface): Promise<boolean> {
@@ -187,6 +189,15 @@ export async function writeFilesOpen($: EngineInterface, isOpen: boolean): Promi
 
 export async function writeMusicAvailable($: EngineInterface, isAvailable: boolean): Promise<void> {
   await update($, isMusicAvailable, () => isAvailable)
+}
+
+/** 측정판을 켜고 끈다. 켜져 있었는지(바꾸기 전 값)가 아니라 바뀐 뒤의 값을 돌려준다. */
+export async function toggleDiag($: EngineInterface): Promise<boolean> {
+  const next = !(await read($, isDiag))
+
+  await update($, isDiag, () => next)
+
+  return next
 }
 
 export function readOpenHelp($: EngineInterface): Promise<string> {

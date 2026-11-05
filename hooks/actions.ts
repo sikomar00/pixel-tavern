@@ -10,6 +10,7 @@ import {
   readGitInfo,
   readMood,
   readOpenHelp,
+  toggleDiag,
   refreshGit,
   readRadio,
   writeArmed,
@@ -45,6 +46,7 @@ export type Actions = {
   toggleRadio: () => Promise<void>
   setVolume: (level: number) => Promise<void>
   toggleHelp: (id: string) => Promise<void>
+  toggleDiag: () => Promise<boolean>
   toggleFiles: () => Promise<void>
 }
 
@@ -133,6 +135,7 @@ export function makeActions($: EngineInterface): Actions {
     setHidden: hidden => writeHidden($, hidden),
     // "?"를 누르면 그 설명이 패널 안에서 펼쳐지고, 다시 누르면 접힌다(하나만 열린다).
     toggleHelp: async id => writeOpenHelp($, (await readOpenHelp($)) === id ? '' : id),
+    toggleDiag: () => toggleDiag($),
     toggleFiles: async () => writeFilesOpen($, !(await readFilesOpen($))),
     // 음량은 재생기를 켤 때 정해지므로, 켜져 있으면 새 음량으로 다시 켠다.
     setVolume: async level => {

@@ -49,6 +49,7 @@ declare module 'claude-code' {
       volume: number
       isFilesOpen: boolean
       isMusicAvailable: boolean
+      isDiag: boolean
       openHelp: string
     }
   }

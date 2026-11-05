@@ -38,12 +38,23 @@ export const register: Register = on => {
     await writeRadio($, 'off') // 다시 불러오면 재생기 프로세스는 이미 끝나 있다
     await detectMusic($)
     await $.command.register({ name: 'tavern', description: '픽셀 여관 패널을 엽니다' })
+    await $.command.register({ name: 'tavern-diag', description: '패널의 실제 폭·간격·글자 크기를 재는 측정판을 켜고 끕니다' })
 
     void refresh($).catch(error => logFailure($, error))
     $.clock.every(REFRESH_MS, () => void refresh($).catch(error => logFailure($, error)))
     if (await takeIntro($)) $.ui.toast(INTRO)
 
     return next(e)
+  })
+
+  // 측정판: 앱에서 패널을 캡처해 보내면 실제 폭·간격·글자 크기를 알 수 있다(화면 설계를 추정이 아니라 숫자로 하려는 용도).
+  on('command.run', { command: 'tavern-diag' }, async $ => {
+    const actions = makeActions($)
+    const isOn = await actions.toggleDiag()
+
+    await actions.openPanel()
+
+    return { text: isOn ? '측정판을 켰어요. 패널 맨 위를 캡처해 보내 주세요. 끄려면 /tavern-diag 를 다시 입력해요.' : '측정판을 껐어요.' }
   })
 
   on('command.run', { command: 'tavern' }, async $ => {
@@ -137,7 +148,8 @@ export const register: Register = on => {
         </Box>
       )
     }
-    const view = { ...(await readView($)), ...(await readPanel($)) }
+    const frame = { columns: e.props.bodyColumns, rows: e.props.scroll.bodyRows, placement: e.props.placement, surface: e.surface }
+    const view = { ...(await readView($)), ...(await readPanel($)), frame }
 
     return panelView(ui as Elements['desktop'], view, makeActions($))
   })
