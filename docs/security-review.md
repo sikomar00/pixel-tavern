@@ -1,6 +1,6 @@
 # 보안·코드 품질 점검
 
-기준: 커밋 `49d7f01`. 작성일 2026-11-05. 코드를 읽고 검색해서 확인했고, 재생기는 실제 Windows에서 소리 없이 돌려 보았습니다.
+기준: 커밋 `bec0ab0` + 바뀐 파일 목록(커밋 전). 작성일 2026-11-05. 코드를 읽고 검색해서 확인했고, 재생기는 실제 Windows에서 소리 없이 돌려 보았습니다.
 **[확인]** 코드·실행으로 확인 · **[시험]** 자동 시험 · **[미검증]** 확인하지 못함
 
 ## 1. 바깥에서 들어오는 입력은 매우 적다
@@ -19,7 +19,7 @@
 
 **명령 주입 [확인]** 모든 외부 프로세스는 인자 배열로 실행해서 셸이 해석하지 않습니다(`process.run/spawn`). PowerShell 재생기는 `-Command`로 상수 스크립트를 받고, 바뀌는 값(주소·음량)은 환경변수로 넘기므로 스크립트에 값이 끼어들지 않습니다.
 
-**입력 검증 [확인]** 검증이 필요한 경계는 파일 경로 하나였습니다. 줄바꿈 등 제어 문자(`\u0000-\u001f`, `\u007f`)를 기록 시점에 한 곳(`trackFile`)에서 뺍니다. 이 문자가 남으면 (a) 엔진이 버튼을 거부해 패널 전체가 사라지고 (b) 프롬프트 칸에 여러 줄이 끼어들 수 있었습니다. [시험] `tests/safety.test.tsx` — 고치기 전에 (a)가 실제로 재현됨.
+**입력 검증 [확인]** 검증이 필요한 경계는 파일 경로 하나였습니다. 줄바꿈 등 제어 문자(`\u0000-\u001f`, `\u007f`)를 기록 시점에 한 곳(`trackFile`)에서 뺍니다. 이 문자가 남으면 (a) 엔진이 버튼을 거부해 패널 전체가 사라지고 (b) 프롬프트 칸에 여러 줄이 끼어들 수 있었습니다. [시험] `tests/safety.test.tsx` — 고치기 전에 (a)가 실제로 재현됨. git 출력의 파일 이름도 같은 함수(`withoutControl`)로 제어 문자를 뺍니다(git은 보통 제어 문자를 따옴표로 감싸 내보내지만 한 번 더 막음).
 
 **경로 검증 [확인]** 모드는 파일을 읽거나 열지 않습니다. 경로는 글자로 저장·표시하고 `@경로` 텍스트를 프롬프트에 채울 뿐이라, 경로 이탈(`..`)로 얻는 접근이 없습니다. 실제로 파일을 읽는 것은 사용자가 보낸 뒤의 엔진입니다.
 
@@ -43,7 +43,7 @@
 
 **타입 안전 [미검증]** 타입 정의(`types/index.d.ts`)와 `tsconfig.json`은 있으나, 이 환경에 `tsc`가 없어 검사를 돌리지 못했습니다. 대신 `claude plugin validate`(상태 키가 계약과 맞는지)와 자동 시험 78개로 갈음했습니다.
 
-**모듈 의존 [확인]** `register → (actions, alerts, banner, panel, radio …)`, `panel → (layout, music, usage, diag …)`, `state → (git, scenes, format, volume)`, `radio → (state, scenes, volume)`. 실행 시점 순환은 없습니다. 타입만 서로 가리키는 곳이 둘 있습니다(`layout`·`music` → `panel`의 `PanelData`, `panel` → `banner`의 `BannerData`). 바깥 세계(git·재생기)는 각각 `git.ts`, `radio.ts` 한 파일에 모여 있습니다.
+**모듈 의존 [확인]** `register → (actions, alerts, banner, panel, radio …)`, `panel → (layout, music, gitrows, usage, diag …)`, `state → (git, scenes, format, volume)`, `radio → (state, scenes, volume)`. 실행 시점 순환은 없습니다. 타입만 서로 가리키는 곳이 둘 있습니다(`layout`·`music` → `panel`의 `PanelData`, `panel` → `banner`의 `BannerData`). 바깥 세계(git·재생기)는 각각 `git.ts`, `radio.ts` 한 파일에 모여 있습니다.
 
 **OS 호환 [시험]** 음악만 Windows 전용입니다. `where.exe powershell.exe`로 확인해 없으면 음악 버튼이 사라집니다. 나머지(배너·패널·git·사용량)는 OS와 무관합니다. 다른 OS는 [미검증].
 

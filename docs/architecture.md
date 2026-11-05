@@ -1,6 +1,6 @@
 # 구조
 
-작성일 2026-11-05, 기준 `49d7f01` + 코드 정리 확인 단계(커밋 전). 모드 이름 `pixel-tavern`, 명령 `/tavern`·`/tavern-diag`.
+작성일 2026-11-05, 기준 `bec0ab0` + 바뀐 파일 목록(커밋 전). 모드 이름 `pixel-tavern`, 명령 `/tavern`·`/tavern-diag`.
 
 ## 한 줄 설명
 
@@ -11,20 +11,21 @@ Claude Code 데스크톱의 "모드"(hooks 모듈)로, 프롬프트 위의 픽�
 | 층 | 파일 | 줄 | 역할 |
 |---|---|---|---|
 | 데이터 | `scenes.ts` | 77 | 장면 4개(이름·팔레트·게이지 이름·방송 주소·방송 이름) |
-| | `volume.ts`, `format.ts` | 10, 43 | 음량 5단계 표, 날짜·글자 서식 |
+| | `volume.ts`, `format.ts` | 10, 46 | 음량 5단계 표, 날짜·글자 서식, 제어 문자 제거 |
 | | `art/` | — | 생성된 SVG(코드가 아니라 데이터). `tools/gen_art.py`가 만듦 |
 | 상태 | `state.ts` | 314 | 상태 값(atom) 선언, 저장소 읽기·쓰기, 오늘 기록 합치기, 파일 기록 |
-| 바깥 세계 | `git.ts` | 43 | `git status/log` 읽기(안전 옵션 포함) |
+| 바깥 세계 | `git.ts` | 74 | `git status/log` 읽기(안전 옵션 포함), 상태 줄을 바뀐 파일 목록(종류별)으로 해석 |
 | | `radio.ts` | 153 | PowerShell 재생기 스크립트, 재생 상태, 다른 채팅 감지, 연결 포기 |
 | 동작 | `actions.ts` | 181 | 버튼이 하는 일(장면·음악·커밋·정리 두 단계·접기·도움말) |
 | | `alerts.ts` | 43 | 사용량 90% 알림 규칙 |
 | 그림·화면 | `usage.ts`, `svg.ts`, `theme.ts` | 125, 54, 35 | 사용량 링 SVG, 글자 폭·잘라내기, 색·간격 |
 | | `layout.tsx` | 109 | 공통 조각(머리글·접기·요약·`?`·카드·칩) |
-| | `banner.tsx`, `panel.tsx` | 155, 349 | 배너, 패널(구역 순서는 아래) |
+| | `banner.tsx`, `panel.tsx` | 155, 297 | 배너, 패널(구역 순서는 아래) |
+| | `gitrows.tsx` | 114 | 작업 현황의 git 칩·바뀐 파일 목록·커밋 로그 |
 | | `music.tsx`, `help.tsx`, `diag.tsx` | 96, 100, 81 | 음악 구역, 도움말, 측정판 |
 | 연결 | `register.tsx` | 168 | 이벤트에 훅을 연결(세션 시작, 도구 호출, 턴 끝, 그리기, 명령) |
 
-패널 구역 순서(`panel.tsx`): (측정판) → 장면 선택 → 그림 → 음악 → 빠른 실행 → 사용량 → 작업 현황(커밋 로그 포함) → 파일.
+패널 구역 순서(`panel.tsx`): (측정판) → 장면 선택 → 그림 → 음악 → 빠른 실행 → 사용량 → 작업 현황(바뀐 파일 목록·커밋 로그 포함) → 파일.
 
 ## 의존 방향
 
@@ -32,7 +33,7 @@ Claude Code 데스크톱의 "모드"(hooks 모듈)로, 프롬프트 위의 픽�
 register ─┬─ actions ── radio ── state ── git
           ├─ alerts                  └─ scenes · format · volume
           ├─ banner ── usage · svg · scenes · format
-          └─ panel ─── layout · music · usage · diag · theme …
+          └─ panel ─── layout · music · gitrows · usage · diag · theme …
 ```
 
 - 화면 파일은 상태를 직접 읽지 않고 `PanelData`/`BannerData`로 값을 받는다. 렌더 훅은 읽기만 한다(값을 쓰는 곳은 `actions`·`register`).
@@ -46,6 +47,7 @@ register ─┬─ actions ── radio ── state ── git
 - 60초마다 갱신하고(`refresh`), 턴이 끝나면 git을 바로 다시 읽는다(배너의 +N이 맞도록).
 - `Edit/Write/NotebookEdit` 호출이 성공하면 `trackFile`이 파일을 기록한다(이 채팅 50개, 오늘 500개). 이때 제어 문자를 뺀다.
 - 오늘 기록은 두 채팅이 같이 쓸 수 있어서 합칠 때 숫자는 큰 쪽, 파일은 합집합으로 한다(`mergeToday`).
+- git 정보(`git`)는 상태 값에 shape 태그(`git-1`)를 붙였다. 모양이 바뀌면(바뀐 파일 목록이 생긴 것처럼) 모드를 다시 불러올 때 옛 값을 읽지 않는다.
 
 ## 재생기 수명
 

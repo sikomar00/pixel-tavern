@@ -1,6 +1,15 @@
 # 변경 기록
 
-## 커밋 전(2026-11-05, P1-1 코드 정리 확인 단계)
+## 커밋 전(2026-11-05, P1-2 바뀐 파일 목록)
+
+- **feat(git)**: 작업 현황에 접이식 "바뀐 파일 N개"를 더함. 새 파일(+)·수정(~)·삭제(-)·이름 변경(>)·충돌(!)을 기호로 구분하고, 충돌이 맨 위, 삭제·충돌은 경고색, 최대 8줄 + "…외 N개". 새 폴더는 끝의 `/`를 남겨 파일과 구분. 기본은 접힘. (`hooks/git.ts` `parseFiles`, `hooks/gitrows.tsx`)
+- **fix(git)**: 한글 파일 이름이 `\352\263…` 같은 숫자 코드로 나오지 않게 `core.quotePath=false` 추가(실제 git으로 확인). 인자 묶음 이름을 `READ_GIT`으로 바꿈.
+- **refactor**: `gitRows`를 `panel.tsx`에서 `gitrows.tsx`로 옮김(`panel.tsx` 349 → 297줄). 제어 문자 제거를 `format.ts`의 `withoutControl` 한 곳으로 합침(파일 기록과 git 출력이 같이 씀).
+- **state**: git 상태 값에 shape 태그 `git-1`(모양이 바뀌어 옛 값을 읽지 않게), 접힘 기본값에 `changes` 추가.
+- **test**: `tests/git.test.tsx` 10개 추가(78 → 88개). 실제 git 출력(한글·공백·이름 변경·충돌)을 그대로 고정한 시험 포함. `safety.test.tsx`의 git 인자 확인을 새 옵션까지 넓힘.
+- **docs**: R-06을 F-07로 옮기고 구조·기능 매트릭스·계획·시험 계획 갱신.
+
+## 2026-11-05 P1-1 코드 정리 확인 단계(커밋 `d3a0822`~`bec0ab0`, 푸시 완료)
 
 - **feat(actions)**: 코드 정리(`/simplify`)에도 "한 번 더" 확인을 넣음. 5초 안에 두 번 눌러야 실행되고, 대기 중에는 "코드를 고쳐요" 안내가 붙는다. 바뀐 파일이 없으면 알림만, 연타해도 한 번, 커밋과 한 번에 하나만 대기한다. 대기 상태를 불리언(`isCommitArmed`)에서 버튼 키(`armedKey`)로 일반화했다(이름을 바꾼 이유: 모드를 다시 불러올 때 옛 `false` 값이 남지 않게). 도움말 문구도 갱신. (`hooks/actions.ts`, `panel.tsx`, `state.ts`, `help.tsx`, `types/index.d.ts`)
 - **test**: `tests/safety.test.tsx` 4개 추가(74 → 78개). 옛 코드에서는 4개 모두 실패함을 확인했다.
