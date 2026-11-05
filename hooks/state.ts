@@ -6,6 +6,7 @@ import { withoutControl } from './format'
 import { readGit } from './git'
 import { DEFAULT_MOOD, MODES, SCENES } from './scenes'
 import { addTouchedFile, setOwnProject, syncStats } from './stats'
+import { loadStations, readStation } from './stations'
 import { DEFAULT_VOLUME, isVolume } from './volume'
 
 // 엔진의 검사(claude plugin validate)는 atom을 읽고 쓰는 파일 안에서 atom을 찾는다.
@@ -62,7 +63,7 @@ export const toUsage = (u: {
   usd: u.cost?.usd ?? null,
 })
 
-/** 세션이 시작될 때 저장소에서 기분·숨김·움직임·오늘 통계·음량을 불러온다. 모양이 틀린 값은 버린다. */
+/** 세션이 시작될 때 저장소에서 기분·숨김·움직임·방송 선택·오늘 통계·음량을 불러온다. 모양이 틀린 값은 버린다. */
 export async function loadStored($: EngineInterface): Promise<void> {
   const [m, hidden, still, level, saved] = await Promise.all([
     $.store.get('mood'),
@@ -77,6 +78,7 @@ export async function loadStored($: EngineInterface): Promise<void> {
   if (typeof still === 'boolean') await update($, isStill, () => still)
   if (isVolume(level)) await update($, volume, () => level)
   if (isStringList(saved)) await update($, collapsed, () => saved)
+  await loadStations($)
   await syncStats($) // 오늘 통계: 다른 채팅과 앞선 실행이 남긴 칸을 읽어 둔다
 }
 
@@ -120,7 +122,10 @@ export async function readView($: EngineInterface) {
     read($, tick), // 1분마다 남은 시간 표시를 다시 그리게 한다
   ])
 
-  return { scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad, radioNote: note, isMusicAvailable: canPlay, isStill: still }
+  const base = SCENES[currentSceneId(m)]
+
+  // 배너·패널은 장면의 music을 그대로 읽는다: 고른 방송이 있으면 그것으로 바꿔 끼운다.
+  return { scene: { ...base, music: await readStation($, base.id) }, usage: u, git: g, model: mdl, project: proj, now, radio: rad, radioNote: note, isMusicAvailable: canPlay, isStill: still }
 }
 
 export async function readPanel($: EngineInterface) {

@@ -4,6 +4,8 @@ import type { RadioState } from '../types'
 import type { Actions } from './actions'
 import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import type { PanelData } from './panel'
+import { SCENES } from './scenes'
+import { stationOptions } from './stations'
 import { WARN_COLOR } from './svg'
 import { SPACE, surfaceOf } from './theme'
 import { MAX_VOLUME } from './volume'
@@ -31,6 +33,28 @@ const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
       <Button key="volume-down" label="−" onPress={() => act.setVolume(d.volume - 1)} />
       <Text>{bars}</Text>
       <Button key="volume-up" label="+" onPress={() => act.setVolume(d.volume + 1)} />
+    </Box>
+  )
+}
+
+/** 방송 고르기(장면마다 따로 기억한다)와 즐겨찾기 별. 즐겨찾기는 고르는 칸의 맨 위에 별과 함께 놓인다. */
+const stationPicker = (ui: Ui, d: PanelData, act: Actions) => {
+  const { Box, Button, Select } = ui
+  const station = d.scene.music
+  const isFavorite = d.favorites.includes(station.id)
+
+  return (
+    <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={SPACE.control}>
+      <Box flexGrow={1}>
+        <Select
+          key="station"
+          label="방송"
+          options={stationOptions(d.favorites, SCENES[d.scene.id].music.id)}
+          value={station.id}
+          onSelect={value => act.setStation(String(value))}
+        />
+      </Box>
+      <Button key="favorite" plain label={isFavorite ? '★ 즐겨찾기' : '☆ 즐겨찾기'} onPress={() => act.toggleFavorite(station.id)} />
     </Box>
   )
 }
@@ -71,9 +95,7 @@ export const music = (ui: Ui, d: PanelData, act: Actions) => {
       ? []
       : [
           inset(ui, [
-            <Text size="heading" weight="semibold" wrap="truncate-end">
-              {d.scene.music.label}
-            </Text>,
+            stationPicker(ui, d, act),
             <Text color={isFailed ? WARN_COLOR : isRunning ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
               {RADIO_STATUS[d.radio]}
             </Text>,

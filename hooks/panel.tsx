@@ -24,6 +24,7 @@ export type PanelData = BannerData & {
   frame: Frame
   today: Today
   projects: ProjectToday[]
+  favorites: string[]
   chatFiles: string[]
   isFilesOpen: boolean
   armedKey: QuickKey | null

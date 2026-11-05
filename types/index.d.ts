@@ -69,6 +69,8 @@ declare module 'claude-code' {
       own: Shaped<Today>
       others: Shaped<Today>
       projects: ProjectToday[]
+      stationChoices: Partial<Record<SceneId, string>>
+      favoriteStations: string[]
       usage: Usage | null
       git: Shaped<GitInfo | null>
       model: string | null

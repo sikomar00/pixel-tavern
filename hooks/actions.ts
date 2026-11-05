@@ -3,6 +3,7 @@ import type { EngineInterface, Timer } from 'claude-code'
 import type { Mood, QuickKey, RadioState, SceneId } from '../types'
 import { startRadio, stopRadio } from './radio'
 import { MODES, SCENES } from './scenes'
+import { chooseStation, readStation, toggleFavorite } from './stations'
 import {
   currentSceneId,
   readArmed,
@@ -65,6 +66,8 @@ export type Actions = {
   mentionFile: (path: string) => Promise<void>
   toggleRadio: () => Promise<void>
   setVolume: (level: number) => Promise<void>
+  setStation: (id: string) => Promise<void>
+  toggleFavorite: (id: string) => Promise<void>
   toggleHelp: (id: string) => Promise<void>
   toggleDiag: () => Promise<boolean>
   toggleStill: () => Promise<boolean>
@@ -176,6 +179,19 @@ export function makeActions($: EngineInterface): Actions {
       await writeVolume($, level)
       if (isRunning(await readRadio($))) await startRadio($, currentSceneId(await readMood($)))
     },
+    // 이 장면의 방송을 바꾼다. 같은 방송이면 아무것도 하지 않고, 켜져 있으면 새 방송으로 다시 켠다(꺼져 있으면 켜지 않는다).
+    // 옛 방송의 연결 실패·가로채임 표시는 방송을 바꾸면 지운다(장면을 바꿀 때와 같다).
+    setStation: async id => {
+      const sceneId = currentSceneId(await readMood($))
+
+      if ((await readStation($, sceneId)).id === id) return
+      await chooseStation($, sceneId, id)
+      const radio = await readRadio($)
+
+      if (isRunning(radio)) await startRadio($, sceneId)
+      else if (radio === 'failed' || radio === 'other') await writeRadio($, 'off')
+    },
+    toggleFavorite: id => toggleFavorite($, id),
     // 켜져 있으면 끄고, 꺼져 있거나 실패한 뒤라면 켠다(다시 시도).
     toggleRadio: async () =>
       isRunning(await readRadio($)) ? stopRadio($) : startRadio($, currentSceneId(await readMood($))),

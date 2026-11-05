@@ -22,6 +22,7 @@ import {
   writeUsage,
 } from './state'
 import { countAction, countPrompt, readProjects, readToday } from './stats'
+import { readFavorites } from './stations'
 import { beginTurn, endTurn, readWork } from './work'
 
 const REFRESH_MS = 60_000
@@ -177,7 +178,7 @@ export const register: Register = on => {
       )
     }
     const frame = { columns: e.props.bodyColumns, rows: e.props.scroll.bodyRows, placement: e.props.placement, surface: e.surface }
-    const view = { ...(await readView($)), ...(await readPanel($)), today: await readToday($), projects: await readProjects($), work: await readWork($), frame }
+    const view = { ...(await readView($)), ...(await readPanel($)), today: await readToday($), projects: await readProjects($), favorites: await readFavorites($), work: await readWork($), frame }
 
     return panelView(ui as Elements['desktop'], view, makeActions($))
   })

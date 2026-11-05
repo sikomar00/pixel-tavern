@@ -1,7 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { RadioState, SceneId } from '../types'
-import { SCENES } from './scenes'
+import { readStation } from './stations'
 import { failRadio, noteRadio, readRadio, readVolume, writeMusicAvailable, writeRadio, yieldRadio } from './state'
 import { gainOf } from './volume'
 
@@ -60,7 +60,7 @@ while ($true) {
 }
 `
 
-type Playback = { isStopped: boolean; sceneId: SceneId; gain: string }
+type Playback = { isStopped: boolean; stream: string; gain: string }
 
 // 이 채팅에서 지금 도는 재생. 모드를 다시 불러오면 자식 프로세스도 함께 끝나므로 null에서 다시 시작한다.
 let current: Playback | null = null
@@ -101,7 +101,7 @@ async function listen($: EngineInterface, playback: Playback): Promise<void> {
   try {
     const child = $.process.spawn({
       argv: ['powershell.exe', ...LAUNCH, PLAYER],
-      env: { TAVERN_URL: SCENES[playback.sceneId].music.stream, TAVERN_VOLUME: playback.gain },
+      env: { TAVERN_URL: playback.stream, TAVERN_VOLUME: playback.gain },
     })
 
     $.clock.after(SLOW_CONNECT_MS, () => void warnIfStillConnecting($, playback))
@@ -148,11 +148,12 @@ async function listen($: EngineInterface, playback: Playback): Promise<void> {
   }
 }
 
-/** 장면의 방송을 켠다. 이미 켜져 있으면 새 방송(또는 새 음량)으로 바꾼다. */
+/** 장면의 방송(고른 것이 있으면 그것)을 켠다. 이미 켜져 있으면 새 방송(또는 새 음량)으로 바꾼다. */
 export async function startRadio($: EngineInterface, sceneId: SceneId): Promise<void> {
   const gain = gainOf(await readVolume($)) // 기다림은 옛 재생을 멈추기 전에 끝낸다: 사이에 다른 시작이 끼어들지 못하게
+  const { stream } = await readStation($, sceneId)
   if (current !== null) current.isStopped = true
-  const playback: Playback = { isStopped: false, sceneId, gain }
+  const playback: Playback = { isStopped: false, stream, gain }
 
   current = playback
   await $.store.set('radioOwner', CHAT_ID)
