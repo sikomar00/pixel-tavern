@@ -282,23 +282,22 @@ test('음악: ▶는 이 장면의 방송을 켜고 ■는 끈다. 장면을 바
   const icon = async () => (await banner.find({ type: 'Button' }))?.props.label
   const paneButtons = async () => (await pane.findAll({ type: 'Button' })).map(b => b.props.label)
 
-  expect(await icon()).toBe('음악 켜기')
+  expect(await icon()).toBe('▶')
   expect(await paneButtons()).toContain('▶ 재생')
   await banner.press({ key: 'music' })
-  expect(await icon()).toBe('음악 끄기')
-  expect(await banner.find({ type: 'Text', text: /^■$/ })).toBeDefined() // 눈에 보이는 글자
+  expect(await icon()).toBe('■')
   expect(String((await banner.find({ type: 'Svg' }))?.props.source)).toContain(`♪ ${SCENES.attic.music.label}`)
   expect(await paneButtons()).toContain('■ 정지')
   expect((await pane.find({ type: 'Text', text: /재생 중/ }))?.text).toContain('24시간')
   expect(urls).toEqual([SCENES.attic.music.stream])
   await banner.press({ key: 'shuffle' })
   expect(urls).toEqual([SCENES.attic.music.stream, SCENES.tearoom.music.stream])
-  expect(await icon()).toBe('음악 끄기')
+  expect(await icon()).toBe('■')
   await banner.press({ key: 'music' })
-  expect(await icon()).toBe('음악 켜기')
+  expect(await icon()).toBe('▶')
   expect(String((await banner.find({ type: 'Svg' }))?.props.source)).not.toContain('♪')
   await clock.advance(1000) // 옛 재생기들이 정지 신호를 보고 끝난다
-  expect(await icon()).toBe('음악 켜기')
+  expect(await icon()).toBe('▶')
   expect(urls).toHaveLength(2)
   await banner.unmount()
   await pane.unmount()
@@ -407,7 +406,7 @@ test('배너를 숨겨도 음악이 켜져 있으면 끄는 버튼은 남는다'
   await banner.press({ key: 'show' })
   await banner.press({ key: 'music' })
   await banner.press({ key: 'hide' })
-  expect((await banner.find({ key: 'music' }))?.props.label).toBe('음악 끄기')
+  expect((await banner.find({ key: 'music' }))?.props.label).toBe('■')
   await banner.press({ key: 'music' })
   expect(await banner.find({ key: 'music' })).toBeUndefined()
   await clock.advance(1000)
@@ -456,7 +455,7 @@ test('패널: 한도 정보가 비어 있으면 이유를 알려 준다', async 
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect(await pane.find({ type: 'Text', text: /아직 한도 정보가 없어요/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /받은 한도 정보가 없어요/ })).toBeDefined()
   await pane.unmount()
 })
 

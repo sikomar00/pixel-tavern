@@ -101,24 +101,15 @@ export const bannerText = (d: BannerData): string => {
 }
 
 export const RADIO_ICON: Record<RadioState, string> = { off: '▶', connecting: '…', playing: '■' }
-const MUSIC_NAME: Record<RadioState, string> = { off: '음악 켜기', connecting: '음악 연결 중 (누르면 끄기)', playing: '음악 끄기' }
 
 type Ui = Elements['desktop']
-type IconButton = { key: string; icon: string; name: string; onPress: () => void }
 
-/** 그림 글자 하나만 보이는 버튼. 이름(label)은 스크린 리더가 읽는다. */
-const iconButton = (ui: Ui, { key, icon, name, onPress }: IconButton) => {
-  const { Button, Text } = ui
+// 버튼은 label을 그대로 그린다(이름과 글자를 따로 줄 수 없다). 긴 이름을 주면 배너 위에 겹쳐 그려지므로 글자 하나만 쓴다.
+const musicButton = (ui: Ui, d: BannerData, act: Actions) => {
+  const { Button } = ui
 
-  return (
-    <Button key={key} plain label={name} onPress={onPress}>
-      <Text>{icon}</Text>
-    </Button>
-  )
+  return <Button key="music" plain label={RADIO_ICON[d.radio]} onPress={() => act.toggleRadio()} />
 }
-
-const musicButton = (ui: Ui, d: BannerData, act: Actions) =>
-  iconButton(ui, { key: 'music', icon: RADIO_ICON[d.radio], name: MUSIC_NAME[d.radio], onPress: () => act.toggleRadio() })
 
 export const bannerView = (ui: Ui, d: BannerData & { isHidden: boolean }, act: Actions) => {
   const { Box, Button, Svg } = ui
@@ -139,11 +130,11 @@ export const bannerView = (ui: Ui, d: BannerData & { isHidden: boolean }, act: A
       <Box position="absolute" top={0} right={1} flexDirection="column">
         <Box flexDirection="row" gap={1}>
           {musicButton(ui, d, act)}
-          {iconButton(ui, { key: 'panel', icon: '▤', name: '여관 패널 열기', onPress: () => act.openPanel() })}
+          <Button key="panel" plain label="▤" onPress={() => act.openPanel()} />
         </Box>
         <Box flexDirection="row" gap={1}>
-          {iconButton(ui, { key: 'shuffle', icon: '⟳', name: '다음 장면으로 바꾸기', onPress: () => act.shuffle() })}
-          {iconButton(ui, { key: 'hide', icon: '✕', name: '배너 숨기기', onPress: () => act.setHidden(true) })}
+          <Button key="shuffle" plain label="⟳" onPress={() => act.shuffle()} />
+          <Button key="hide" plain label="✕" onPress={() => act.setHidden(true)} />
         </Box>
       </Box>
     </Box>

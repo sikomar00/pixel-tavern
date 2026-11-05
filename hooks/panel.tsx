@@ -163,7 +163,7 @@ const quickSection = (ui: Ui, d: PanelData, act: Actions) => {
       {buttons}
     </Box>,
     <Text color={d.scene.muted} size="footnote">
-      리뷰 코드 검토 · 커밋 변경 저장 · 정리 코드 다듬기
+      리뷰=검토 · 커밋=저장 · 정리=다듬기
     </Text>,
     <Text color={d.scene.muted} size="footnote">
       {caution}
@@ -176,7 +176,7 @@ const limitsNote = (ui: Ui, d: PanelData) => {
   const { Text } = ui
 
   if (d.usage !== null && d.usage.limits.length > 0) return []
-  const why = d.usage === null ? '첫 응답이 끝나면 채워져요' : '아직 한도 정보가 없어요. 구독 계정이 아니면 계속 비어 있을 수 있어요'
+  const why = d.usage === null ? '첫 응답이 끝나면 채워져요' : '아직 받은 한도 정보가 없어요'
 
   return [
     <Text color={d.scene.muted} size="footnote">
