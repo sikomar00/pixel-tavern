@@ -1,6 +1,7 @@
 import type { Elements, EngineInterface, Register } from 'claude-code'
 
 import { makeActions } from './actions'
+import { detectMusic } from './radio'
 import { RADIO_ICON, bannerText, bannerView } from './banner'
 import { baseName } from './format'
 import { panelView } from './panel'
@@ -35,6 +36,7 @@ export const register: Register = on => {
     await loadStored($)
     await writeProject($, baseName(e.cwd))
     await writeRadio($, 'off') // 다시 불러오면 재생기 프로세스는 이미 끝나 있다
+    await detectMusic($)
     await $.command.register({ name: 'tavern', description: '픽셀 여관 패널을 엽니다' })
 
     void refresh($).catch(error => logFailure($, error))
@@ -63,10 +65,13 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // "도구 실행"은 거부되거나 실패하지 않고 끝난 호출만 센다.
   on('tool.call', async ($, e, next) => {
-    await countAction($)
+    const ran = await next(e)
 
-    return next(e)
+    if (ran.deny === undefined && ran.isError !== true) await countAction($)
+
+    return ran
   })
 
   for (const tool of ['Edit', 'Write'] as const) {
@@ -80,6 +85,14 @@ export const register: Register = on => {
       return ran
     })
   }
+
+  on('tool.call', { tool: 'NotebookEdit' }, async ($, e, next) => {
+    const ran = await next(e)
+
+    if (ran.deny === undefined && ran.isError !== true && typeof e.notebook_path === 'string') await trackFile($, e.notebook_path)
+
+    return ran
+  })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const own = await next(e)
@@ -95,7 +108,9 @@ export const register: Register = on => {
           {own}
           <Box flexDirection="row" gap={1}>
             <Text dimColor>{bannerText(data)}</Text>
-            <Button key="music" plain label={RADIO_ICON[data.radio]} onPress={() => makeActions($).toggleRadio()} />
+            {data.isMusicAvailable
+              ? [<Button key="music" plain label={RADIO_ICON[data.radio]} onPress={() => makeActions($).toggleRadio()} />]
+              : []}
           </Box>
         </Box>
       )
