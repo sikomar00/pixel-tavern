@@ -4,7 +4,8 @@ import { ART, composeScene } from './hooks/art'
 import { baseName, fmtReset, shortModel } from './hooks/format'
 import { parseLog, parseStatus } from './hooks/git'
 import { bannerSvg } from './hooks/banner'
-import { limitsSvg } from './hooks/limits'
+import { HELP } from './hooks/help'
+import { usageSvg } from './hooks/usage'
 import { MODES, SCENES } from './hooks/scenes'
 import { WARN_COLOR, clipWidth } from './hooks/svg'
 import { TEXT_PRIMARY, chipOf, lift, surfaceOf } from './hooks/theme'
@@ -129,8 +130,9 @@ test('장면 그림과 장면 데이터가 어긋나지 않는다', async () => 
 
     expect(art.labelName, `${id} 게이지 이름`).toBe(scene.gauges.context)
     expect(svg).toContain(`${scene.gauges.context} 42%`)
-    expect(svg).toContain(scene.title)
-    expect(svg).toContain(scene.motto)
+    expect(svg).toContain('viewBox="0 0 85 74"') // 그림이 끝나는 줄에서 자른다
+    expect(svg).not.toContain(scene.title) // 제목·모토 블록은 그리지 않는다(장면 선택 칸과 배너에 있다)
+    expect(svg).not.toContain(scene.motto)
     expect(art.gauges).toHaveLength(21)
     expect(svg.length).toBeLessThan(131072)
     expect(composeScene(art, null)).toContain(`${scene.gauges.context} -`)
@@ -200,18 +202,21 @@ test('패널: 장면을 고르면 바뀌고, 한도·프로젝트·최근 커밋
   await clock.settle()
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const sources = async () => (await ui.findAll({ type: 'Svg' })).map(svg => String(svg.props.source))
+  const alts = async () => (await ui.findAll({ type: 'Svg' })).map(svg => String(svg.props.alt))
 
   expect(await sources()).toHaveLength(2)
-  expect((await sources())[0]).toContain('비 오는 밤 다락방')
-  expect((await sources())[1]).toContain('24% 사용')
+  expect((await alts())[0]).toContain('비 오는 밤 다락방')
+  expect((await sources())[1]).toContain('>24%<') // 5시간 사용량
+  expect((await sources())[1]).toContain('>42%<') // 컨텍스트
+  expect((await sources())[1]).toContain('84k/200k')
   expect((await sources())[1]).toContain('1h 37m 뒤 리셋')
   expect((await ui.find({ type: 'Text', text: /abc1234/ }))?.text).toContain('배너 추가')
   expect(await ui.find({ type: 'Text', text: /변경 2개/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /올릴 커밋 1/ }))?.text).toBe('올릴 커밋 1 · 받을 커밋 2')
   await ui.select({ key: 'scene', value: 'dungeon' })
-  expect((await sources())[0]).toContain('8비트 던전')
+  expect((await alts())[0]).toContain('8비트 던전')
   await ui.select({ key: 'scene', value: 'neon' })
-  expect((await sources())[0]).toContain('네온 펑크 성')
+  expect((await alts())[0]).toContain('네온 펑크 성')
   await ui.unmount()
 })
 
@@ -329,9 +334,9 @@ test('경고 기준은 배너와 패널이 같다', async () => {
   const banner = (usage: never) =>
     bannerSvg({ scene: SCENES.attic, usage, git: null, model: null, project: 'p', now: NOON, radio: 'off' })
 
-  expect(limitsSvg(SCENES.attic, hot, NOON)).toContain(WARN_COLOR)
+  expect(usageSvg(SCENES.attic, hot, NOON)).toContain(WARN_COLOR)
   expect(banner(hot)).toContain(WARN_COLOR)
-  expect(limitsSvg(SCENES.attic, cool, NOON)).not.toContain(WARN_COLOR)
+  expect(usageSvg(SCENES.attic, cool, NOON)).not.toContain(WARN_COLOR)
   expect(banner(cool)).not.toContain(WARN_COLOR)
 })
 
@@ -503,7 +508,7 @@ test('한 턴이 끝나면(측정) git 상태를 바로 다시 읽어 배너의 
 })
 // ── 최종 검증(추가 시험): 이름이 '검증:'으로 시작한다 ─────────────────────────────
 
-const filledSegments = (svg: string): number => (svg.match(/width="6" height="8" fill="#(?!ffffff)/g) ?? []).length
+const filledSegments = (svg: string): number => (svg.match(/stroke="#(?!ffffff)/g) ?? []).length
 
 const luminance = (hex: string): number => {
   const [r = 0, g = 0, b = 0] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
@@ -518,22 +523,22 @@ const contrast = (a: string, b: string): number => {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-test('검증: 한도 0·3·45·100%와 초과 상태에서 숫자와 막대가 일치한다', async () => {
+test('검증: 사용량 0·3·45·100%와 초과 상태에서 숫자와 원의 칸 수가 일치한다', async () => {
   const at = (scene: (typeof SCENES)[keyof typeof SCENES], percentUsed: number) =>
-    limitsSvg(scene, { limits: [{ kind: 'five_hour', percentUsed, resetsAt: '2026-11-04T13:37:00' }] } as never, NOON)
+    usageSvg(scene, { limits: [{ kind: 'five_hour', percentUsed, resetsAt: '2026-11-04T13:37:00' }] } as never, NOON)
 
   for (const scene of Object.values(SCENES)) {
-    for (const [percent, filled] of [[0, 0], [3, 1], [45, 18], [100, 40], [120, 40]] as const) {
+    for (const [percent, filled] of [[0, 0], [3, 1], [45, 9], [100, 20], [120, 20]] as const) {
       const svg = at(scene, percent)
 
-      expect(svg, `${scene.id} ${percent}% 숫자`).toContain(`>${percent}% 사용<`)
-      expect(filledSegments(svg), `${scene.id} ${percent}% 막대`).toBe(filled)
+      expect(svg, `${scene.id} ${percent}% 숫자`).toContain(`>${percent}%<`)
+      expect(filledSegments(svg), `${scene.id} ${percent}% 원`).toBe(filled)
     }
     // 5시간 단위임과 리셋까지 남은 시간을 문구로 알린다.
     expect(at(scene, 45), scene.id).toContain('5H')
     expect(at(scene, 45), scene.id).toContain('1h 37m 뒤 리셋')
   }
-  // 주간 한도가 없는 줄은 0%처럼 보이지 않고 "정보 없음"이라고 쓴다.
+  // 주간 한도가 없는 원은 0%처럼 보이지 않고 "정보 없음"이라고 쓴다.
   expect(at(SCENES.attic, 45)).toContain('>정보 없음<')
   // 배너도 같은 반올림을 쓴다.
   const banner = bannerSvg({ scene: SCENES.attic, usage: { limits: [{ kind: 'five_hour', percentUsed: 44.6 }] } as never, git: null, model: null, project: 'p', now: NOON, radio: 'off' })
@@ -636,7 +641,7 @@ for (const [status, hint] of [
     await clock.settle()
     const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-    expect((await pane.find({ type: 'Text', text: /(올릴|받을) 커밋/ }))?.text).toBe(hint)
+    expect((await pane.find({ type: 'Text', text: /^(올릴|받을) 커밋 \d/ }))?.text).toBe(hint)
     expect(await pane.find({ type: 'Text', text: status.includes(' M ') ? /변경 1개/ : /변경 없음/ })).toBeDefined()
     await pane.unmount()
   })
@@ -712,7 +717,7 @@ test('디자인: 패널 구역이 정해진 순서로 이름표를 달고 나온
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const texts = (await pane.findAll({ type: 'Text' })).map(node => node.text)
-  const order = ['음악', '빠른 실행', '사용량 한도', '작업 현황', '이 채팅에서 만진 파일'].map(title => texts.indexOf(title))
+  const order = ['음악', '빠른 실행', '사용량', '작업 현황', '이 채팅에서 만진 파일'].map(title => texts.indexOf(title))
 
   expect(order.every(index => index >= 0)).toBe(true)
   expect([...order].sort((a, b) => a - b)).toEqual(order) // 위에서 아래로 이 순서
@@ -751,19 +756,22 @@ test('디자인 2차: 만진 파일은 소제목으로 작업 현황 바로 아�
   await pane.unmount()
 })
 
-test('디자인 2차: 커밋 대기로 라벨이 길어져도 세 줄 모두 같은 폭의 버튼 칸을 쓴다', async ($, on) => {
+test('디자인 3차: 빠른 실행은 버튼만 한 줄에 두고, 설명은 늘어놓지 않으며, 커밋 대기에는 안내가 덧붙는다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const cells = async () => (await pane.findAll({ type: 'Box' })).filter(node => node.props.minWidth !== undefined).map(node => node.props.minWidth)
+  const waiting = async () => (await pane.find({ type: 'Text', text: /5초 안에 누르면 실행/ })) !== undefined
+  const labels = async () => Promise.all(['review', 'commit', 'simplify'].map(async key => (await pane.find({ key }))?.props.label))
 
-  expect(await cells()).toEqual([14, 14, 14])
-  await pane.press({ key: 'commit' }) // 대기 상태
-  expect((await pane.find({ key: 'commit' }))?.props.label).toBe('한 번 더: 커밋')
-  expect(await cells()).toEqual([14, 14, 14])
-  expect(await pane.find({ type: 'Text', text: /5초 안에 누르면 실행/ })).toBeDefined()
+  expect(await labels()).toEqual(['리뷰', '커밋', '정리'])
+  expect((await pane.findAll({ type: 'Box' })).filter(node => node.props.minWidth !== undefined)).toHaveLength(0) // 줄마다 칸 폭을 고정하던 방식은 없다
+  expect(await pane.find({ type: 'Text', text: /코드 검토|변경 저장|코드 다듬기/ })).toBeUndefined() // 설명은 "?"에만 있다
+  expect(await waiting()).toBe(false)
+  await pane.press({ key: 'commit' })
+  expect(await labels()).toEqual(['리뷰', '한 번 더: 커밋', '정리'])
+  expect(await waiting()).toBe(true)
   await pane.unmount()
 })
 
@@ -825,6 +833,70 @@ test('장면 통합: 예전 버전이 저장한 모드·장면 설정도 그대�
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect(String((await pane.find({ type: 'Svg' }))?.props.source)).toContain('네온 펑크 성')
+  expect(String((await pane.find({ type: 'Svg' }))?.props.alt)).toContain('네온 펑크 성')
+  await pane.unmount()
+})
+
+// ── 3차 검증(추가 시험): 원형 사용량, 도움말(?), 제목 블록 제거 ─────────────────────
+
+test('사용량 원: 컨텍스트·5시간·주간 3개가 한 줄에 순서대로 나온다', async () => {
+  const usage = {
+    percent: 42,
+    tokens: 84000,
+    window: 200000,
+    limits: [
+      { kind: 'five_hour', percentUsed: 23.5, resetsAt: '2026-11-04T13:37:00' },
+      { kind: 'seven_day', percentUsed: 7, resetsAt: '2026-11-06T15:00:00' },
+    ],
+  } as never
+  const svg = usageSvg(SCENES.attic, usage, NOON)
+  const at = (needle: string) => svg.indexOf(needle)
+
+  expect(svg.match(/<path /g)).toHaveLength(60) // 원 3개 × 칸 20개
+  expect(filledSegments(svg)).toBe(8 + 5 + 1) // 42% → 8칸, 23.5% → 5칸, 7% → 1칸
+  // 왼쪽부터 컨텍스트, 5시간, 주간
+  expect(at('>촛불<')).toBeGreaterThan(-1)
+  expect(at('>촛불<')).toBeLessThan(at('>오늘의 의뢰 · 5H<'))
+  expect(at('>오늘의 의뢰 · 5H<')).toBeLessThan(at('>길드 장부 · 주간<'))
+  expect(svg).toContain('>84k/200k<')
+  expect(svg).toContain('>1h 37m 뒤 리셋<')
+  expect(svg).toContain('>2d 3h 뒤 리셋<')
+  expect(usageSvg(SCENES.attic, null, NOON)).toContain('>-<') // 값이 없으면 0%처럼 보이지 않는다
+})
+
+test('제목 블록: 패널 그림은 296px로 잘려 있고 제목·모토 글자를 그리지 않는다', async ($, on) => {
+  const clock = world(on)
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const art = (await pane.findAll({ type: 'Svg' }))[0]
+
+  expect(art?.props.height).toBe(296)
+  expect(String(art?.props.source)).not.toContain('비는 오고')
+  await pane.unmount()
+})
+
+test('도움말: ? 6곳이 있고, 설명 창은 평소 숨겨져 있으며, 눌러도 같은 설명이 뜬다', async ($, on) => {
+  const spy = newSpy()
+  const clock = world(on, { spy })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const marks = (await pane.findAll({ type: 'Button' })).filter(button => button.key?.startsWith('help:'))
+  const tips = (await pane.findAll({ type: 'Box' })).filter(node => node.props.display === 'none')
+
+  expect(marks.map(button => String(button.key).slice('help:'.length))).toEqual(['scene', 'music', 'quick', 'usage', 'status', 'files'])
+  expect(marks.every(button => button.props.label === '?')).toBe(true)
+  // 설명 창: 평소엔 숨김(display none), 위치는 "?" 옆에 띄운 절대 위치, 폭은 직접 정한다.
+  expect(tips).toHaveLength(6)
+  expect(tips.every(tip => tip.props.position === 'absolute' && tip.props.right === 0 && typeof tip.props.width === 'number')).toBe(true)
+  // 설명 글자는 있다(올리면 보인다). 빠른 실행의 세 버튼 설명과 커밋의 두 번 누르기 안내가 들어 있다.
+  for (const line of HELP.quick) expect(await pane.find({ type: 'Text', text: line })).toBeDefined()
+  expect(HELP.quick.join(' ')).toContain('두 번 눌러야 실행')
+  // 눌러도 같은 설명이 알림으로 뜬다(마우스 없이 볼 수 있게).
+  await pane.press({ key: 'help:quick' })
+  expect(spy.toasts).toContain(HELP.quick.join(' · '))
   await pane.unmount()
 })
