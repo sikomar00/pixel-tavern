@@ -162,7 +162,10 @@ for (const id of ['attic', 'tearoom', 'dungeon', 'neon'] as const) {
     expect(String(svgs[1]?.props.source)).toContain('>컨텍스트<')
     for (const name of ['컨텍스트', '5시간 한도', '주간 한도']) expect(String(svgs[1]?.props.source), `${id} ${name}`).toContain(`>${name}<`)
     for (const old of METAPHOR_NAMES) expect(String(svgs[1]?.props.source), `${id} ${old}`).not.toContain(`>${old}<`)
-    expect((await pane.find({ type: 'Text', text: SCENES[id].music.label }))?.text).toBe(SCENES[id].music.label)
+    const station = await pane.find({ key: 'station' }) // 방송 이름은 방송 고르기 칸에 보인다
+
+    expect(station?.props.value).toBe(SCENES[id].music.id)
+    expect((station?.props.options as { value: string; label: string }[]).find(option => option.value === SCENES[id].music.id)?.label).toContain(SCENES[id].music.label)
     await pane.unmount()
   })
 }
