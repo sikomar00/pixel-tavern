@@ -6,7 +6,8 @@ import { parseLog, parseStatus } from './hooks/git'
 import { bannerSvg } from './hooks/banner'
 import { QUICK } from './hooks/actions'
 import { HELP } from './hooks/help'
-import { filledSegments as segmentsFor, usageSvg, usageWidthFor } from './hooks/usage'
+import { NO_ALERTS, checkAlerts } from './hooks/alerts'
+import { filledSegments as segmentsFor, usageSummary, usageSvg, usageWidthFor } from './hooks/usage'
 import { MODES, SCENES } from './hooks/scenes'
 import { WARN_COLOR, clipWidth } from './hooks/svg'
 import { TEXT_PRIMARY, chipOf, lift, surfaceOf } from './hooks/theme'
@@ -222,6 +223,8 @@ test('[기능] 패널: 장면을 고르면 바뀌고, 한도·프로젝트·최�
   expect((await sources())[1]).toContain('>42%<') // 컨텍스트
   expect((await sources())[1]).toContain('84k/200k')
   expect((await sources())[1]).toContain('1h 37m 뒤 리셋')
+  expect(await ui.find({ type: 'Text', text: /abc1234/ })).toBeUndefined() // 커밋 로그는 기본으로 접혀 있다
+  await ui.press({ key: 'fold:commits' })
   expect((await ui.find({ type: 'Text', text: /abc1234/ }))?.text).toContain('배너 추가')
   expect(await ui.find({ type: 'Text', text: /변경 2개/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /올릴 커밋 1/ }))?.text).toBe('올릴 커밋 1 · 받을 커밋 2')
@@ -1233,4 +1236,113 @@ test('[레이아웃] 패널 열이 51이면 사용량 그림을 387px로 그리�
 
   expect(texts[index - 1]?.props.size).toBe('title')
   await pane.unmount()
+})
+
+// ── P1 시험: 구역 접기, 한 줄 요약, 상태 기억, 사용량 알림 ─────────────────────────────
+
+test('[사용성] 접기 표시: 구역마다 ▾가 있고, 커밋 로그는 기본으로 접혀 있으며 눌러서 펴고 접는다', async ($, on) => {
+  const clock = world(on)
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const label = async (key: string) => (await pane.find({ key }))?.props.label
+
+  for (const id of ['usage', 'status', 'files', 'music']) expect(await label(`fold:${id}`), id).toBe('▾') // 처음에는 모두 펴져 있다
+  expect(await label('fold:art')).toBe('그림 ▾')
+  expect(await label('fold:commits')).toBe('▸ 최근 커밋 2개')
+  expect(await pane.find({ type: 'Text', text: /abc1234/ })).toBeUndefined()
+  await pane.press({ key: 'fold:commits' })
+  expect(await label('fold:commits')).toBe('▾ 최근 커밋 2개')
+  expect(await pane.find({ type: 'Text', text: /abc1234/ })).toBeDefined()
+  await pane.press({ key: 'fold:commits' })
+  expect(await pane.find({ type: 'Text', text: /abc1234/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+test('[상태] 구역을 접으면 머리글 한 줄과 요약만 남고, 편 상태로 되돌리면 본문이 돌아오며, 상태는 저장된다', async ($, on) => {
+  const store: Record<string, unknown> = { collapsed: ['art', 'usage', 'status', 'files', 'music'] } // 이전에 접어 둔 상태
+  const clock = world(on, { liveStore: store })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const svgs = async () => (await pane.findAll({ type: 'Svg' })).length
+  const has = async (text: string | RegExp) => (await pane.find({ type: 'Text', text })) !== undefined
+
+  expect(await svgs()).toBe(0) // 그림도 사용량도 접혀 있다
+  expect(await pane.find({ key: 'radio' })).toBeUndefined()
+  for (const title of ['사용량', '작업 현황', '이 채팅에서 만진 파일', '음악']) expect(await has(new RegExp(`^${title}$`)), title).toBe(true) // 머리글은 남는다
+  expect(await has('컨텍스트 42% · 5시간 24% · 주간 7%')).toBe(true)
+  expect(await has('p · main +2')).toBe(true)
+  expect(await has('이 채팅 0개')).toBe(true)
+  expect(await has('○ 멈춤')).toBe(true) // 음악의 한 줄 요약
+  expect(await has(/^오늘 누적$/)).toBe(false)
+  await pane.press({ key: 'fold:usage' })
+  expect(await svgs()).toBe(1)
+  expect(store.collapsed).toEqual(['art', 'status', 'files', 'music']) // 저장소에 남는다
+  await pane.press({ key: 'fold:art' })
+  expect(await svgs()).toBe(2)
+  await pane.press({ key: 'fold:music' })
+  expect(await pane.find({ key: 'radio' })).toBeDefined()
+  expect(store.collapsed).toEqual(['status', 'files'])
+  await pane.unmount()
+})
+
+test('[데이터] 접은 사용량 요약: 값 없음은 "-", 리셋이 지난 한도는 "리셋됨"', async () => {
+  const usage = (five: number | null, resetsAt: string) =>
+    ({ percent: 42, tokens: 1, window: 2, usd: null, limits: five === null ? [] : [{ kind: 'five_hour', percentUsed: five, resetsAt }] }) as never
+
+  expect(usageSummary(SCENES.attic, usage(23.5, '2026-11-04T13:37:00'), NOON)).toBe('컨텍스트 42% · 5시간 24% · 주간 -')
+  expect(usageSummary(SCENES.attic, usage(100, '2026-11-04T11:00:00'), NOON)).toBe('컨텍스트 42% · 5시간 리셋됨 · 주간 -')
+  expect(usageSummary(SCENES.attic, null, NOON)).toBe('컨텍스트 - · 5시간 - · 주간 -')
+})
+
+test('[데이터] 사용량 알림 규칙: 90% 이상이 처음 될 때만 알리고, 80% 아래로 내려오면 다시 알릴 준비를 한다', async () => {
+  const reading = (context: number | null, five?: number, resetsAt = '2026-11-04T13:37:00') =>
+    ({ percent: context, tokens: 1, window: 2, usd: null, limits: five === undefined ? [] : [{ kind: 'five_hour', percentUsed: five, resetsAt }] }) as never
+  let state = NO_ALERTS
+  const step = (usage: never) => {
+    const found = checkAlerts(usage, state, NOON)
+
+    state = found.alerted
+
+    return found.messages
+  }
+
+  expect(step(reading(80))).toEqual([])
+  expect(step(reading(89.9))).toEqual([])
+  expect(step(reading(90))).toEqual(['컨텍스트가 90%예요. /compact 로 정리하거나 새 채팅을 여는 게 좋아요'])
+  expect(step(reading(95))).toEqual([]) // 같은 구간에서는 다시 알리지 않는다
+  expect(step(reading(85))).toEqual([]) // 80~90%는 상태를 그대로 둔다(경계에서 깜박이지 않는다)
+  expect(step(reading(92))).toEqual([])
+  expect(step(reading(70))).toEqual([]) // 컨텍스트를 정리했다: 다시 알릴 준비
+  expect(step(reading(93))).toHaveLength(1)
+  expect(step(reading(10, 91))).toEqual(['5시간 한도 91% 사용 · 1h 37m 뒤 리셋'])
+  expect(step(reading(10, 99, '2026-11-04T11:00:00'))).toEqual([]) // 리셋이 지난 한도는 옛 값이라 알리지 않고
+  expect(step(reading(10, 92))).toHaveLength(1) // 새 구간에서 다시 알린다
+})
+
+test('[사용성] 사용량이 90%를 넘으면 한 번만 알림이 뜬다(측정이 올 때마다 확인)', async ($, on) => {
+  const spy = newSpy()
+  const clock = world(on, { spy })
+
+  on('session.measure', (_, e) => ({ changed: e.changed }))
+  await $.session.start(START)
+  await clock.settle()
+  const measure = async (percent: number) => {
+    await $.session.measure({ ...USAGE, context: { ...USAGE.context, percent }, changed: ['context'] })
+    await clock.settle()
+  }
+  const alerts = () => spy.toasts.filter(text => text.startsWith('컨텍스트가'))
+
+  await measure(80)
+  expect(alerts()).toHaveLength(0)
+  await measure(92)
+  expect(alerts()).toEqual(['컨텍스트가 92%예요. /compact 로 정리하거나 새 채팅을 여는 게 좋아요'])
+  await measure(95)
+  expect(alerts()).toHaveLength(1)
+  await measure(70)
+  await measure(93)
+  expect(alerts()).toHaveLength(2)
 })

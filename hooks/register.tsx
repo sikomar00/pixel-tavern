@@ -1,6 +1,8 @@
 import type { Elements, EngineInterface, Register } from 'claude-code'
 
 import { makeActions } from './actions'
+import { NO_ALERTS, checkAlerts } from './alerts'
+import type { Alerted } from './alerts'
 import { detectMusic } from './radio'
 import { RADIO_ICON, bannerText, bannerView } from './banner'
 import { baseName } from './format'
@@ -31,7 +33,11 @@ const INTRO = '픽셀 여관이 열렸어요. 오른쪽 위 버튼: ▶ 음악 �
 const logFailure = ($: EngineInterface, error: unknown) =>
   $.ui.log(`pixel-tavern: refresh failed: ${String(error)}`, { to: 'debug' })
 
+const ALERT_MS = 8000
+
 export const register: Register = on => {
+  let alerted: Alerted = NO_ALERTS // 이 채팅에서 이미 알린 사용량 구간
+
   on('session.start', async ($, e, next) => {
     await loadStored($)
     await writeProject($, baseName(e.cwd))
@@ -64,7 +70,13 @@ export const register: Register = on => {
   })
 
   on('session.measure', async ($, e, next) => {
-    await writeUsage($, toUsage(e))
+    const usage = toUsage(e)
+
+    await writeUsage($, usage)
+    const found = checkAlerts(usage, alerted, await $.clock.now())
+
+    alerted = found.alerted
+    for (const message of found.messages) $.ui.toast(message, { timeoutMs: ALERT_MS })
     void refreshGit($).catch(error => logFailure($, error)) // 한 턴이 끝났으니 파일이 바뀌었을 수 있다
 
     return next(e)

@@ -23,6 +23,7 @@ type Opts = {
   radio?: 'off' | 'playing' | 'failed'
   diag?: boolean // 측정판
   help?: string // 펼쳐 둘 도움말
+  fold?: string[] // 접기/펴기를 누를 구역(art, usage, status, files, music, commits)
 }
 
 const strip = (node: any): any => ({
@@ -93,6 +94,7 @@ const scenario = (opts: Opts) =>
     if (opts.arm) await pane.press({ key: 'commit' })
     if (opts.radio === 'failed' || opts.radio === 'playing') await pane.press({ key: 'radio' })
     if (opts.help !== undefined) await pane.press({ key: `help:${opts.help}` })
+    for (const id of opts.fold ?? []) await pane.press({ key: `fold:${id}` })
     if (opts.diag) await $.command.run({ command: 'tavern-diag' })
     await clock.settle()
     const root = (await pane.findAll({ type: 'Box' }))[0]
@@ -108,3 +110,6 @@ scenario({ id: 'busy', cwd: 'C:/work/a-very-long-project-name-that-keeps-going-2
 scenario({ id: 'bare', cwd: 'C:/work/x', scene: 'tearoom', usage: usage(null, null), isRepo: false, radio: 'playing' })
 scenario({ id: 'help', cwd: 'C:/work/demo', scene: 'dungeon', usage: usage(42, 23), help: 'usage' })
 scenario({ id: 'diag', cwd: 'C:/work/demo', usage: usage(42, 23), diag: true })
+scenario({ id: 'commits-open', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['commits'] }) // 커밋 로그를 펼친 상태(예전 기본)
+scenario({ id: 'art-off', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['art'] }) // 그림을 접은 "집중" 상태
+scenario({ id: 'folded', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['art', 'usage', 'status', 'files', 'music'] }) // 모두 접은 상태
