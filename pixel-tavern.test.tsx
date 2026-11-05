@@ -52,17 +52,26 @@ const counter = async (ui: { findAll: (q: object) => Promise<{ text?: string }[]
 /** 엔진이 받쳐 주는 호출을 흉내 낸다. 시계와 저장소는 키트가 메모리로 답한다. */
 type Spy = { ran: string[]; filled: string[]; toasts: string[] }
 type GitFake = { status: string; exitCode?: number }
-type World = { spy?: Spy; stored?: object; git?: GitFake; usage?: typeof USAGE }
+type World = { spy?: Spy; stored?: object; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
 
 const newSpy = (): Spy => ({ ran: [], filled: [], toasts: [] })
 
 const world = (
   on: Parameters<typeof mock.clock>[0],
-  { spy = newSpy(), stored = {}, git = { status: GIT_STATUS }, usage = USAGE }: World = {},
+  { spy = newSpy(), stored = {}, git = { status: GIT_STATUS }, usage = USAGE, whereExit = 0, tool = { value: { result: {} } }, liveStore }: World = {},
 ) => {
   const clock = mock.clock(on, { now: NOON })
 
-  mock.store(on, stored)
+  if (liveStore === undefined) mock.store(on, stored)
+  else {
+    // 채팅끼리 공유되는 저장소를 흉내 낸다: 시험이 객체를 직접 고쳐 "다른 채팅"의 기록을 남길 수 있다.
+    on('store.get', (_, e) => ({ value: liveStore[e.key] }))
+    on('store.set', (_, e) => {
+      liveStore[e.key] = e.value
+
+      return { value: undefined }
+    })
+  }
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: { command: 'tavern' } }))
   on('command.run', (_, e) => {
@@ -87,14 +96,14 @@ const world = (
   on('session.usage', () => ({ value: usage }))
   on('process.run', (_, e) => ({
     value: {
-      exitCode: e.argv.includes('status') ? (git.exitCode ?? 0) : 0,
+      exitCode: e.argv[0] === 'where.exe' ? whereExit : e.argv.includes('status') ? (git.exitCode ?? 0) : 0,
       stdout: e.argv.includes('status') ? git.status : GIT_LOG,
       stderr: '',
       isStdoutTruncated: false,
       isStderrTruncated: false,
     },
   }))
-  on('tool.call', () => ({ result: {} }))
+  on('tool.call', () => tool.value)
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
 
@@ -875,7 +884,7 @@ test('[레이아웃] 제목 블록: 패널 그림은 296px로 잘려 있고 제�
   await pane.unmount()
 })
 
-test('[사용성] 도움말: 항목마다 ? 하나와 숨겨진 설명 창이 짝을 이루고, 눌러도 같은 설명이 뜬다', async ($, on) => {
+test('[사용성] 도움말: 항목마다 ? 하나와 숨겨진 설명 창이 짝을 이루고, 누르면 패널 안에서 펼쳐진다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
 
@@ -893,8 +902,18 @@ test('[사용성] 도움말: 항목마다 ? 하나와 숨겨진 설명 창이 �
   for (const line of HELP.quick) expect(await pane.find({ type: 'Text', text: line })).toBeDefined()
   expect(HELP.quick.join(' ')).toContain('두 번 눌러야 실행')
   expect(Object.keys(HELP)).not.toContain('files') // 한 줄이면 되는 안내는 화면에 직접 적는다
+  // 누르면 패널 안에서 펼쳐진다(하나만 열린다): 설명 카드가 생기고, 그 항목의 호버 창은 빠지고, 표시는 ×가 된다.
+  expect(await pane.find({ key: 'help-card:quick' })).toBeUndefined()
   await pane.press({ key: 'help:quick' })
-  expect(spy.toasts).toContain(HELP.quick.join(' · '))
+  expect(await pane.find({ key: 'help-card:quick' })).toBeDefined()
+  expect((await pane.find({ key: 'help:quick' }))?.props.label).toBe('×')
+  expect((await pane.findAll({ type: 'Box' })).filter(node => node.props.display === 'none')).toHaveLength(ids.length - 1)
+  await pane.press({ key: 'help:usage' })
+  expect(await pane.find({ key: 'help-card:quick' })).toBeUndefined() // 다른 걸 열면 앞의 것은 닫힌다
+  expect(await pane.find({ key: 'help-card:usage' })).toBeDefined()
+  await pane.press({ key: 'help:usage' })
+  expect(await pane.find({ key: 'help-card:usage' })).toBeUndefined()
+  expect(spy.toasts).not.toContain(HELP.quick.join(' · ')) // 알림으로 띄우지 않는다
   await pane.unmount()
 })
 
@@ -913,7 +932,7 @@ test('[상태] 음악: 재생기를 켜지 못하면 연결 실패로 보이고,
   await clock.settle()
   const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패)$/ }))?.text
+  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패|◇ 다른 채팅에서 재생 중)$/ }))?.text
 
   expect(await status()).toBe('○ 멈춤')
   await banner.press({ key: 'music' })
@@ -945,7 +964,7 @@ test('[상태] 음악: 재생기가 저절로 끝나면 연결 실패, 새 시�
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패)$/ }))?.text
+  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패|◇ 다른 채팅에서 재생 중)$/ }))?.text
 
   await pane.press({ key: 'radio' })
   await clock.settle()
@@ -971,7 +990,7 @@ test('[상태] 음악: 실패한 뒤에는 장면을 바꾸면 표시가 지워�
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패)$/ }))?.text
+  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패|◇ 다른 채팅에서 재생 중)$/ }))?.text
 
   await pane.press({ key: 'radio' })
   expect(await status()).toBe('✕ 연결 실패')
@@ -1036,3 +1055,118 @@ for (const id of ['attic', 'tearoom', 'dungeon', 'neon'] as const) {
     await pane.unmount()
   })
 }
+
+// ── P0 시험: 리셋 지난 한도, 도구 집계, 음악 가로채기·윈도우 감지, 클릭 도움말 ─────────────────
+
+test('[데이터] 리셋 시각이 지난 한도는 옛 사용량을 보이지 않고 "리셋됨"으로 알린다(배너·패널)', async () => {
+  const usage = {
+    percent: 42,
+    tokens: 84000,
+    window: 200000,
+    limits: [
+      { kind: 'five_hour', percentUsed: 100, resetsAt: '2026-11-04T11:00:00' }, // NOON보다 이전
+      { kind: 'seven_day', percentUsed: 45, resetsAt: '2026-11-06T15:00:00' },
+    ],
+  } as never
+  const panel = usageSvg(SCENES.attic, usage, NOON)
+  const banner = bannerSvg({ scene: SCENES.attic, usage, git: null, model: null, project: 'p', now: NOON, radio: 'off', isMusicAvailable: true })
+
+  expect(panel).toContain('>리셋됨<')
+  expect(panel).toContain('>응답 후 갱신<')
+  expect(panel).not.toContain('곧 뒤 리셋')
+  expect(panel).not.toContain('>100%<') // 옛 100%는 보이지 않는다
+  expect(filledSegments(panel)).toBe(8 + 0 + 9) // 컨텍스트 42%, 5시간은 비움, 주간 45%
+  expect(banner).toContain('>리셋됨<')
+  expect(banner).not.toContain('>100%<')
+  expect(banner).toContain('>45%<') // 아직 리셋 전인 한도는 그대로
+})
+
+test('[데이터] 도구 실행은 끝까지 간 호출만 세고, NotebookEdit로 고친 파일도 수정 파일에 잡힌다', async ($, on) => {
+  const tool = { value: { result: {} } as object }
+  const clock = world(on, { tool })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const call = () => $.tool.call({ tool: 'Bash', command: 'ls' })
+
+  await call()
+  expect(await counter(pane, '도구 실행')).toBe('1')
+  tool.value = { result: {}, isError: true }
+  await call()
+  tool.value = { deny: '막힘' }
+  await call()
+  expect(await counter(pane, '도구 실행')).toBe('1') // 실패하거나 거부된 호출은 세지 않는다
+  tool.value = { result: {} }
+  await $.tool.call({ tool: 'NotebookEdit', notebook_path: 'C:/work/p/n.ipynb', new_source: 'x' } as never)
+  expect(await counter(pane, '수정 파일')).toBe('1')
+  expect((await pane.findAll({ type: 'Button' })).some(button => button.props.label === 'p/n.ipynb')).toBe(true)
+  await pane.unmount()
+})
+
+test('[상태] 음악: 다른 채팅이 가져가면 연결 실패가 아니라 "다른 채팅에서 재생 중"으로 보이고, 여기서 다시 켤 수 있다', async ($, on) => {
+  const spy = newSpy()
+  const store: Record<string, unknown> = {} // 채팅끼리 공유되는 저장소 역할
+  const clock = world(on, { spy, liveStore: store })
+  const kills = new Set<number>()
+  let spawns = 0
+
+  on('process.spawn', async function* () {
+    const mine = (spawns += 1)
+
+    yield { stream: 'stdout', text: 'connecting\n' }
+    yield { stream: 'stdout', text: 'playing\n' }
+    for (;;) {
+      await clock.sleep(500)
+      if (kills.has(mine)) return { value: { code: 1, signal: null } } // 다른 채팅의 재생기가 이 재생기를 껐다
+      yield { stream: 'stdout', text: '.\n' }
+    }
+  })
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패|◇ 다른 채팅에서 재생 중)$/ }))?.text
+  const takeOver = async (spawn: number) => {
+    store.radioOwner = 'another-chat' // 다른 채팅이 음악을 켜며 저장소에 남기는 표시
+    kills.add(spawn)
+    await clock.advance(1000)
+  }
+
+  await pane.press({ key: 'radio' })
+  expect(await status()).toBe('● 재생 중')
+  await takeOver(1)
+  expect(await status()).toBe('◇ 다른 채팅에서 재생 중')
+  expect((await pane.find({ key: 'radio' }))?.props.label).toBe('▶ 여기서 켜기')
+  expect((await banner.find({ key: 'music' }))?.props.label).toBe('▶')
+  expect(spy.toasts.some(text => text.includes('다른 채팅에서 음악을 켜서'))).toBe(true)
+  expect(spy.toasts.some(text => text.includes('연결 실패'))).toBe(false) // 실패로 알리지 않는다
+  await pane.press({ key: 'radio' }) // 여기서 다시 켠다
+  expect(await status()).toBe('● 재생 중')
+  expect(typeof store.radioOwner).toBe('string') // 다시 켤 때 소유 표시를 내 이름표로 되돌린다
+  expect(store.radioOwner).not.toBe('another-chat')
+  await takeOver(2)
+  expect(await status()).toBe('◇ 다른 채팅에서 재생 중')
+  await pane.select({ key: 'scene', value: 'dungeon' }) // 장면을 바꾸면 옛 표시는 지워지고, 저절로 켜지지도 않는다
+  expect(await status()).toBe('○ 멈춤')
+  expect(spawns).toBe(2)
+  await pane.unmount()
+  await banner.unmount()
+})
+
+test('[사용성] 윈도우가 아니면 음악 버튼 대신 이유만 보이고, 배너에도 음악 버튼이 없다', async ($, on) => {
+  const clock = world(on, { whereExit: 1 }) // where.exe가 PowerShell을 못 찾는 환경
+
+  await $.session.start(START)
+  await clock.settle()
+  const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  expect(await banner.find({ key: 'music' })).toBeUndefined()
+  expect(await banner.find({ key: 'panel' })).toBeDefined() // 나머지 버튼은 그대로
+  expect(await pane.find({ key: 'radio' })).toBeUndefined()
+  expect(await pane.find({ key: 'volume-up' })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /^음악은 Windows에서만 쓸 수 있어요$/ })).toBeDefined()
+  await banner.unmount()
+  await pane.unmount()
+})
