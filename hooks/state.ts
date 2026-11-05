@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { GitInfo, Mood, QuickKey, RadioState, SceneId, Today, Usage } from '../types'
-import { todayKey, withoutControl } from './format'
+import type { GitInfo, Mood, QuickKey, RadioState, SceneId, Usage } from '../types'
+import { withoutControl } from './format'
 import { readGit } from './git'
 import { DEFAULT_MOOD, MODES, SCENES } from './scenes'
+import { addTouchedFile, syncStats } from './stats'
 import { DEFAULT_VOLUME, isVolume } from './volume'
 
 // 엔진의 검사(claude plugin validate)는 atom을 읽고 쓰는 파일 안에서 atom을 찾는다.
@@ -12,9 +13,7 @@ import { DEFAULT_VOLUME, isVolume } from './volume'
 // 모양을 바꾸면 shape 태그를 올린다. 이전 버전이 저장한 값은 기본값으로 읽힌다.
 /** 접어 둔 구역(처음 한 번만 쓰는 기본값). art·usage·status·files·music은 구역, commits는 작업 현황의 커밋 로그, changes는 바뀐 파일 목록. */
 const DEFAULT_COLLAPSED: string[] = ['commits', 'changes']
-const EMPTY_TODAY: Today = { date: '', prompts: 0, actions: 0, files: [] }
 const mood = atom({ plugin: 'pixel-tavern', key: 'mood' } as const, DEFAULT_MOOD as Mood, { shape: 'mood-1' })
-const today = atom({ plugin: 'pixel-tavern', key: 'today' } as const, EMPTY_TODAY, { shape: 'today-1' })
 const isHidden = atom({ plugin: 'pixel-tavern', key: 'isHidden' } as const, false)
 const usage = atom({ plugin: 'pixel-tavern', key: 'usage' } as const, null)
 const git = atom({ plugin: 'pixel-tavern', key: 'git' } as const, null, { shape: 'git-1' }) // git-1: 바뀐 파일 목록(files)이 생겼다
@@ -48,31 +47,7 @@ export const isMood = (v: unknown): v is Mood => {
   )
 }
 
-/**
- * 같은 날의 두 오늘 기록을 합친다: 숫자는 큰 쪽, 파일은 합집합.
- * 둘 다 늘기만 하는 값이라 이렇게 합쳐도 줄어들지 않는다(채팅이 여럿이거나 갱신이 거의 동시에 와도 기록이 사라지지 않는다).
- */
-export const mergeToday = (a: Today, b: Today): Today => ({
-  date: a.date,
-  prompts: Math.max(a.prompts, b.prompts),
-  actions: Math.max(a.actions, b.actions),
-  files: [...new Set([...a.files, ...b.files])].slice(-500),
-})
-
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(item => typeof item === 'string')
-
-export const isToday = (v: unknown): v is Today => {
-  const t = v as Partial<Today> | null
-
-  return (
-    typeof t === 'object' &&
-    t !== null &&
-    typeof t.date === 'string' &&
-    typeof t.prompts === 'number' &&
-    typeof t.actions === 'number' &&
-    Array.isArray(t.files)
-  )
-}
 
 export const toUsage = (u: {
   context: { percent?: number; tokens?: number; window: number }
@@ -88,19 +63,18 @@ export const toUsage = (u: {
 
 /** 세션이 시작될 때 저장소에서 기분·숨김·오늘 통계·음량을 불러온다. 모양이 틀린 값은 버린다. */
 export async function loadStored($: EngineInterface): Promise<void> {
-  const [m, hidden, t, level, saved] = await Promise.all([
+  const [m, hidden, level, saved] = await Promise.all([
     $.store.get('mood'),
     $.store.get('isHidden'),
-    $.store.get('today'),
     $.store.get('volume'),
     $.store.get('collapsed'),
   ])
 
   if (isMood(m)) await update($, mood, () => m)
   if (typeof hidden === 'boolean') await update($, isHidden, () => hidden)
-  if (isToday(t)) await update($, today, () => t)
   if (isVolume(level)) await update($, volume, () => level)
   if (isStringList(saved)) await update($, collapsed, () => saved)
+  await syncStats($) // 오늘 통계: 다른 채팅과 앞선 실행이 남긴 칸을 읽어 둔다
 }
 
 /** 처음 한 번만 true. 안내 문구를 한 번만 보여 주려는 용도. */
@@ -118,17 +92,9 @@ export async function refreshGit($: EngineInterface): Promise<void> {
   await update($, git, (): GitInfo | null => info)
 }
 
-/** 저장소에 있는 오늘 기록(다른 채팅이 더한 것 포함)을 이 채팅의 화면 값에 합친다. 다른 날 기록이면 무시한다. */
-async function syncToday($: EngineInterface): Promise<void> {
-  const shared = await $.store.get('today')
-  const day = todayKey(await $.clock.now())
-
-  if (isToday(shared) && shared.date === day) await update($, today, t => (t.date === day ? mergeToday(t, shared) : shared))
-}
-
-/** git·한도·모델·오늘 기록을 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
+/** git·한도·모델·오늘 통계를 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
 export async function refresh($: EngineInterface): Promise<void> {
-  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncToday($)])
+  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncStats($)])
 
   await update($, usage, () => toUsage(snapshot))
   await update($, model, () => modelId)
@@ -154,8 +120,7 @@ export async function readView($: EngineInterface) {
 }
 
 export async function readPanel($: EngineInterface) {
-  const [t, files, armed, level, isOpen, help, diag, folded] = await Promise.all([
-    read($, today),
+  const [files, armed, level, isOpen, help, diag, folded] = await Promise.all([
     read($, chatFiles),
     read($, armedKey),
     read($, volume),
@@ -165,7 +130,7 @@ export async function readPanel($: EngineInterface) {
     read($, collapsed),
   ])
 
-  return { today: t, chatFiles: files, armedKey: armed, volume: level, isFilesOpen: isOpen, openHelp: help, isDiag: diag, collapsed: folded }
+  return { chatFiles: files, armedKey: armed, volume: level, isFilesOpen: isOpen, openHelp: help, isDiag: diag, collapsed: folded }
 }
 
 export function readHidden($: EngineInterface): Promise<boolean> {
@@ -279,30 +244,6 @@ export async function writeProject($: EngineInterface, name: string): Promise<vo
   await update($, project, () => name)
 }
 
-/** 오늘 통계를 고친다. 날짜가 바뀌었으면 0부터 다시 센다. 저장소의 최신 기록(다른 채팅이 더한 것)과 합친 위에 더한다. */
-export async function bumpToday($: EngineInterface, change: (t: Today) => Today): Promise<void> {
-  const day = todayKey(await $.clock.now())
-  const shared = await $.store.get('today')
-  let saved = EMPTY_TODAY
-
-  await update($, today, t => {
-    const current = t.date === day ? t : { ...EMPTY_TODAY, date: day }
-
-    saved = change(isToday(shared) && shared.date === day ? mergeToday(current, shared) : current)
-
-    return saved
-  })
-  await $.store.set('today', saved)
-}
-
-export function countPrompt($: EngineInterface): Promise<void> {
-  return bumpToday($, t => ({ ...t, prompts: t.prompts + 1 }))
-}
-
-export function countAction($: EngineInterface): Promise<void> {
-  return bumpToday($, t => ({ ...t, actions: t.actions + 1 }))
-}
-
 /** Claude가 이 채팅에서 고치거나 쓴 파일을 기록한다. */
 export async function trackFile($: EngineInterface, rawPath: string): Promise<void> {
   // 줄바꿈 같은 제어 문자가 든 이름은 엔진이 버튼 이름으로 그리지 못해 패널 전체가 사라진다(시험으로 확인). 프롬프트에 줄이 끼어드는 것도 함께 막힌다.
@@ -310,5 +251,5 @@ export async function trackFile($: EngineInterface, rawPath: string): Promise<vo
 
   if (path === '') return
   await update($, chatFiles, list => (list.includes(path) ? list : [...list, path].slice(-50)))
-  await bumpToday($, t => ({ ...t, files: t.files.includes(path) ? t.files : [...t.files, path].slice(-500) }))
+  await addTouchedFile($, path)
 }

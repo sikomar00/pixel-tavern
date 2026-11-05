@@ -25,7 +25,7 @@ export type Work =
   | { phase: 'running'; key: QuickKey; turnId: string }
   | { phase: 'ended'; key: QuickKey; reason: TurnEnd; seconds: number }
 
-/** 오늘 통계. date가 오늘과 다르면 0부터 다시 센다. */
+/** 오늘 통계. date가 오늘과 다르면 0부터 다시 센다. files는 경로가 아니라 경로의 짧은 지문이다(옛 합계 키에만 경로가 들어 있다). */
 export type Today = { date: string; prompts: number; actions: number; files: string[] }
 
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
@@ -58,7 +58,9 @@ declare module 'claude-code' {
     'pixel-tavern': {
       mood: Shaped<Mood>
       isHidden: boolean
-      today: Shaped<Today>
+      slot: string
+      own: Shaped<Today>
+      others: Shaped<Today>
       usage: Usage | null
       git: Shaped<GitInfo | null>
       model: string | null

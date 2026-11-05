@@ -4,6 +4,20 @@ export const baseName = (path: string): string =>
 /** 줄바꿈 같은 제어 문자를 뺀다. 엔진은 제어 문자가 든 글자를 거부해 패널 전체를 못 그린다. */
 export const withoutControl = (text: string): string => text.replace(/[\u0000-\u001f\u007f]/g, '')
 
+/**
+ * 파일 경로의 짧은 지문(FNV-1a 32비트, 16진수 8자리). 오늘 수정한 파일을 "한 번만 세기" 위해 경로 대신 저장한다:
+ * 저장소가 작아지고 절대 경로를 남기지 않는다. 역슬래시는 슬래시로 맞춰 같은 파일이 두 번 세어지지 않게 한다.
+ * 서로 다른 파일이 같은 지문이 될 확률은 파일 500개에서도 10만분의 3 정도다.
+ */
+export const fingerprint = (path: string): string => {
+  const normalized = path.replace(/\\/g, '/')
+  let hash = 0x811c9dc5
+
+  for (let i = 0; i < normalized.length; i += 1) hash = Math.imul(hash ^ normalized.charCodeAt(i), 0x01000193)
+
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
 /** 폴더 이름 하나를 붙여 같은 이름의 파일을 구분한다: `hooks/radio.ts` */
 export const shortPath = (path: string): string => path.split(/[\\/]/).filter(Boolean).slice(-2).join('/')
 
