@@ -4,13 +4,16 @@ import { ART, composeScene } from './hooks/art'
 import { baseName, fmtReset, shortModel } from './hooks/format'
 import { parseLog, parseStatus } from './hooks/git'
 import { bannerSvg } from './hooks/banner'
+import { QUICK } from './hooks/actions'
 import { HELP } from './hooks/help'
-import { usageSvg } from './hooks/usage'
+import { filledSegments as segmentsFor, usageSvg } from './hooks/usage'
 import { MODES, SCENES } from './hooks/scenes'
 import { WARN_COLOR, clipWidth } from './hooks/svg'
 import { TEXT_PRIMARY, chipOf, lift, surfaceOf } from './hooks/theme'
 
 const NOON = Date.parse('2026-11-04T12:00:00')
+const COMMIT_LABEL = QUICK.find(item => item.key === 'commit')?.label // 버튼 이름은 QUICK 한 곳에서만 정한다
+const ARMED_LABEL = '한 번 더' // 커밋을 한 번 누른 5초 동안의 라벨
 
 const BAND = {
   plugin: 'pixel-tavern',
@@ -101,7 +104,7 @@ const world = (
   return clock
 }
 
-test('순수 도우미: 시간·모델·파일 주소·git 출력 읽기', async () => {
+test('[데이터] 순수 도우미: 시간·모델·파일 주소·git 출력 읽기', async () => {
   const now = Date.parse('2026-11-04T10:00:00Z')
 
   expect(fmtReset('2026-11-04T11:37:00Z', now)).toBe('1h 37m')
@@ -119,7 +122,7 @@ test('순수 도우미: 시간·모델·파일 주소·git 출력 읽기', async
   ])
 })
 
-test('장면 그림과 장면 데이터가 어긋나지 않는다', async () => {
+test('[데이터] 장면 그림과 장면 데이터가 어긋나지 않는다', async () => {
   const ids = MODES.flatMap(mode => mode.scenes)
 
   expect(ids).toHaveLength(4)
@@ -140,7 +143,7 @@ test('장면 그림과 장면 데이터가 어긋나지 않는다', async () => 
   }
 })
 
-test('배너: 사용량·프로젝트·브랜치를 그리고 엔진 내용을 남긴다', async ($, on) => {
+test('[데이터] 배너: 사용량·프로젝트·브랜치를 그리고 엔진 내용을 남긴다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start({ cwd: 'C:/work/my-project', surface: 'desktop', isInteractive: true })
@@ -158,7 +161,7 @@ test('배너: 사용량·프로젝트·브랜치를 그리고 엔진 내용을 �
   await ui.unmount()
 })
 
-test('배너: ⟳는 4개 장면을 차례로 돌고, ✕로 숨겼다가 다시 연다', async ($, on) => {
+test('[기능] 배너: ⟳는 4개 장면을 차례로 돌고, ✕로 숨겼다가 다시 연다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start({ cwd: 'C:/work/p', surface: 'desktop', isInteractive: true })
@@ -182,7 +185,7 @@ test('배너: ⟳는 4개 장면을 차례로 돌고, ✕로 숨겼다가 다시
   await ui.unmount()
 })
 
-test('터미널에서는 글자 한 줄 띠로 대신한다', async ($, on) => {
+test('[레이아웃] 터미널에서는 글자 한 줄 띠로 대신한다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start({ cwd: 'C:/work/p', surface: 'terminal', isInteractive: true })
@@ -195,7 +198,7 @@ test('터미널에서는 글자 한 줄 띠로 대신한다', async ($, on) => {
   await ui.unmount()
 })
 
-test('패널: 장면을 고르면 바뀌고, 한도·프로젝트·최근 커밋이 보인다', async ($, on) => {
+test('[기능] 패널: 장면을 고르면 바뀌고, 한도·프로젝트·최근 커밋이 보인다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start({ cwd: 'C:/work/my-project', surface: 'desktop', isInteractive: true })
@@ -220,7 +223,7 @@ test('패널: 장면을 고르면 바뀌고, 한도·프로젝트·최근 커밋
   await ui.unmount()
 })
 
-test('오늘 통계와 이 채팅의 파일: Edit·Write만 기록하고, 누르면 @경로를 넣는다', async ($, on) => {
+test('[데이터] 오늘 통계와 이 채팅의 파일: Edit·Write만 기록하고, 누르면 @경로를 넣는다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
 
@@ -242,7 +245,7 @@ test('오늘 통계와 이 채팅의 파일: Edit·Write만 기록하고, 누르
   await ui.unmount()
 })
 
-test('어제의 통계는 0으로 보이고, 오늘 첫 기록부터 새로 센다', async ($, on) => {
+test('[데이터] 어제의 통계는 0으로 보이고, 오늘 첫 기록부터 새로 센다', async ($, on) => {
   const yesterday = { date: '2026-11-3', prompts: 5, actions: 9, files: ['C:/old.ts'] }
   const clock = world(on, { stored: { today: yesterday } })
 
@@ -257,7 +260,7 @@ test('어제의 통계는 0으로 보이고, 오늘 첫 기록부터 새로 센�
   await ui.unmount()
 })
 
-test('빠른 실행: 커밋은 두 번 눌러야 실행된다', async ($, on) => {
+test('[상태] 빠른 실행: 커밋은 두 번 눌러야 실행된다', async ($, on) => {
   const spy = newSpy()
   const { ran } = spy
   const clock = world(on, { spy })
@@ -270,14 +273,14 @@ test('빠른 실행: 커밋은 두 번 눌러야 실행된다', async ($, on) =>
   expect(ran).toEqual(['code-review'])
   await ui.press({ key: 'commit' })
   expect(ran).toEqual(['code-review'])
-  expect((await ui.find({ key: 'commit' }))?.props.label).toBe('한 번 더: 커밋')
+  expect((await ui.find({ key: 'commit' }))?.props.label).toBe(ARMED_LABEL)
   await ui.press({ key: 'commit' })
   expect(ran).toEqual(['code-review', 'commit-commands:commit'])
-  expect((await ui.find({ key: 'commit' }))?.props.label).toBe('커밋')
+  expect((await ui.find({ key: 'commit' }))?.props.label).toBe(COMMIT_LABEL)
   await ui.unmount()
 })
 
-test('음악: ▶는 이 장면의 방송을 켜고 ■는 끈다. 장면을 바꾸면 방송도 바뀐다', async ($, on) => {
+test('[상태] 음악: ▶는 이 장면의 방송을 켜고 ■는 끈다. 장면을 바꾸면 방송도 바뀐다', async ($, on) => {
   const clock = world(on)
   const urls: string[] = []
 
@@ -322,13 +325,13 @@ test('음악: ▶는 이 장면의 방송을 켜고 ■는 끈다. 장면을 바
   await pane.unmount()
 })
 
-test('글자 폭 자르기: 한글은 넓게, 영문은 좁게 센다', async () => {
+test('[레이아웃] 글자 폭 자르기: 한글은 넓게, 영문은 좁게 센다', async () => {
   expect(clipWidth('abc', 3, 10)).toBe('abc')
   expect(clipWidth('가나다라마바사', 3, 10)).toBe('가나…')
   expect(clipWidth('abcdefghij', 3, 10)).toBe('abcd…')
 })
 
-test('경고 기준은 배너와 패널이 같다', async () => {
+test('[데이터] 경고 기준은 배너와 패널이 같다', async () => {
   const hot = { limits: [{ kind: 'five_hour', percentUsed: 85 }] } as never
   const cool = { limits: [{ kind: 'five_hour', percentUsed: 84 }] } as never
   const banner = (usage: never) =>
@@ -340,7 +343,7 @@ test('경고 기준은 배너와 패널이 같다', async () => {
   expect(banner(cool)).not.toContain(WARN_COLOR)
 })
 
-test('배너 게이지: 100%여도 이름이 퍼센트와 겹치지 않게 자른다', async () => {
+test('[레이아웃] 배너 게이지: 100%여도 이름이 퍼센트와 겹치지 않게 자른다', async () => {
   const at = (percentUsed: number) =>
     bannerSvg({
       scene: SCENES.attic,
@@ -373,7 +376,7 @@ const fakePlayer = (on: Parameters<typeof mock.clock>[0], clock: Clock, seen: En
 
 const START = { cwd: 'C:/work/p', surface: 'desktop', isInteractive: true } as const
 
-test('음악: 음량 −/+는 단계를 바꾸고, 켜져 있으면 새 음량으로 다시 켠다', async ($, on) => {
+test('[기능] 음악: 음량 −/+는 단계를 바꾸고, 켜져 있으면 새 음량으로 다시 켠다', async ($, on) => {
   const clock = world(on)
   const seen: Env[] = []
 
@@ -381,7 +384,7 @@ test('음악: 음량 −/+는 단계를 바꾸고, 켜져 있으면 새 음량�
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const bars = async () => (await pane.find({ type: 'Text', text: /^[●○]+$/ }))?.text
+  const bars = async () => (await pane.find({ type: 'Text', text: /^[●○]{5}$/ }))?.text
 
   expect(await bars()).toBe('●●●○○')
   await pane.press({ key: 'volume-up' })
@@ -400,19 +403,19 @@ for (const [saved, shown] of [
   [5, '●●●●●'],
   [9, '●●●○○'], // 범위 밖 값은 버린다
 ] as const) {
-  test(`음량: 저장된 ${saved}은 ${shown}로 보인다`, async ($, on) => {
+  test(`[상태] 음량: 저장된 ${saved}은 ${shown}로 보인다`, async ($, on) => {
     const clock = world(on, { stored: { volume: saved } })
 
     await $.session.start(START)
     await clock.settle()
     const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-    expect((await pane.find({ type: 'Text', text: /^[●○]+$/ }))?.text).toBe(shown)
+    expect((await pane.find({ type: 'Text', text: /^[●○]{5}$/ }))?.text).toBe(shown)
     await pane.unmount()
   })
 }
 
-test('배너를 숨겨도 음악이 켜져 있으면 끄는 버튼은 남는다', async ($, on) => {
+test('[사용성] 배너를 숨겨도 음악이 켜져 있으면 끄는 버튼은 남는다', async ($, on) => {
   const clock = world(on)
 
   fakePlayer(on, clock, [])
@@ -432,7 +435,7 @@ test('배너를 숨겨도 음악이 켜져 있으면 끄는 버튼은 남는다'
   await banner.unmount()
 })
 
-test('음악: 30초가 지나도 연결 중이면 알려 준다', async ($, on) => {
+test('[상태] 음악: 30초가 지나도 연결 중이면 알려 준다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
   const slow = () => spy.toasts.filter(text => text.includes('아직 연결하지 못했어요'))
@@ -452,7 +455,7 @@ test('음악: 30초가 지나도 연결 중이면 알려 준다', async ($, on) 
   await banner.unmount()
 })
 
-test('빠른 실행: 바뀐 파일이 없으면 커밋은 알려 주기만 하고 실행하지 않는다', async ($, on) => {
+test('[기능] 빠른 실행: 바뀐 파일이 없으면 커밋은 알려 주기만 하고 실행하지 않는다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy, git: { status: '## main\n' } })
 
@@ -463,11 +466,11 @@ test('빠른 실행: 바뀐 파일이 없으면 커밋은 알려 주기만 하�
   await pane.press({ key: 'commit' })
   expect(spy.ran).toEqual([])
   expect(spy.toasts).toContain('커밋할 변경이 없어요')
-  expect((await pane.find({ key: 'commit' }))?.props.label).toBe('커밋') // "한 번 더"로 바뀌지 않는다
+  expect((await pane.find({ key: 'commit' }))?.props.label).toBe(COMMIT_LABEL) // "한 번 더"로 바뀌지 않는다
   await pane.unmount()
 })
 
-test('패널: 한도 정보가 비어 있으면 이유를 알려 준다', async ($, on) => {
+test('[사용성] 패널: 한도 정보가 비어 있으면 이유를 알려 준다', async ($, on) => {
   const clock = world(on, { usage: { ...USAGE, rateLimits: [] } })
 
   await $.session.start(START)
@@ -478,7 +481,7 @@ test('패널: 한도 정보가 비어 있으면 이유를 알려 준다', async 
   await pane.unmount()
 })
 
-test('처음 한 번만 안내 문구를 보여 준다', async ($, on) => {
+test('[사용성] 처음 한 번만 안내 문구를 보여 준다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
 
@@ -489,7 +492,7 @@ test('처음 한 번만 안내 문구를 보여 준다', async ($, on) => {
   expect(spy.toasts.filter(text => text.includes('픽셀 여관이 열렸어요'))).toHaveLength(1)
 })
 
-test('한 턴이 끝나면(측정) git 상태를 바로 다시 읽어 배너의 +N이 맞는다', async ($, on) => {
+test('[데이터] 한 턴이 끝나면(측정) git 상태를 바로 다시 읽어 배너의 +N이 맞는다', async ($, on) => {
   const git = { status: '## main\n' }
   const clock = world(on, { git })
 
@@ -523,7 +526,7 @@ const contrast = (a: string, b: string): number => {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-test('검증: 사용량 0·3·45·100%와 초과 상태에서 숫자와 원의 칸 수가 일치한다', async () => {
+test('[데이터] 사용량 0·3·45·100%와 초과 상태에서 숫자와 원의 칸 수가 일치한다', async () => {
   const at = (scene: (typeof SCENES)[keyof typeof SCENES], percentUsed: number) =>
     usageSvg(scene, { limits: [{ kind: 'five_hour', percentUsed, resetsAt: '2026-11-04T13:37:00' }] } as never, NOON)
 
@@ -534,8 +537,9 @@ test('검증: 사용량 0·3·45·100%와 초과 상태에서 숫자와 원의 �
       expect(svg, `${scene.id} ${percent}% 숫자`).toContain(`>${percent}%<`)
       expect(filledSegments(svg), `${scene.id} ${percent}% 원`).toBe(filled)
     }
-    // 5시간 단위임과 리셋까지 남은 시간을 문구로 알린다.
-    expect(at(scene, 45), scene.id).toContain('5H')
+    // 기능 이름이 먼저, 테마 이름은 그 아래. 리셋까지 남은 시간도 문구로 알린다.
+    expect(at(scene, 45), scene.id).toContain('>5시간 한도<')
+    expect(at(scene, 45), scene.id).toContain(`>${scene.gauges.fiveHour.split(' · ')[0]}<`)
     expect(at(scene, 45), scene.id).toContain('1h 37m 뒤 리셋')
   }
   // 주간 한도가 없는 원은 0%처럼 보이지 않고 "정보 없음"이라고 쓴다.
@@ -546,7 +550,7 @@ test('검증: 사용량 0·3·45·100%와 초과 상태에서 숫자와 원의 �
   expect(banner).toContain('>45%<')
 })
 
-test('검증: 4개 장면의 글자색 대비가 4.5 이상이다', async () => {
+test('[레이아웃] 4개 장면의 글자색 대비가 4.5 이상이다', async () => {
   for (const scene of Object.values(SCENES)) {
     expect(contrast(scene.muted, scene.base), `${scene.id} 흐린 글자`).toBeGreaterThanOrEqual(4.5)
     expect(contrast(scene.accent, scene.base), `${scene.id} 강조색`).toBeGreaterThanOrEqual(4.5)
@@ -554,7 +558,7 @@ test('검증: 4개 장면의 글자색 대비가 4.5 이상이다', async () => 
   }
 })
 
-test('검증: 커밋 첫 클릭은 대기 상태를 보이고, 5초가 지나면 처음으로 돌아간다', async ($, on) => {
+test('[상태] 커밋 첫 클릭은 대기 상태를 보이고, 5초가 지나면 처음으로 돌아간다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
 
@@ -562,15 +566,15 @@ test('검증: 커밋 첫 클릭은 대기 상태를 보이고, 5초가 지나면
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const label = async () => (await pane.find({ key: 'commit' }))?.props.label
-  const waiting = async () => (await pane.find({ type: 'Text', text: /5초 안에 누르면 실행/ })) !== undefined
+  const waiting = async () => (await pane.find({ type: 'Text', text: /5초 안에 한 번 더 누르면 변경을 커밋해요/ })) !== undefined
 
   await pane.press({ key: 'commit' })
-  expect(await label()).toBe('한 번 더: 커밋')
+  expect(await label()).toBe(ARMED_LABEL)
   expect(await waiting()).toBe(true)
   await clock.advance(4_000)
-  expect(await label()).toBe('한 번 더: 커밋')
+  expect(await label()).toBe(ARMED_LABEL)
   await clock.advance(2_000)
-  expect(await label()).toBe('커밋')
+  expect(await label()).toBe(COMMIT_LABEL)
   expect(await waiting()).toBe(false)
   expect(spy.ran).toEqual([])
   await pane.press({ key: 'commit' }) // 초기화된 뒤에는 다시 두 번 눌러야 한다
@@ -580,7 +584,7 @@ test('검증: 커밋 첫 클릭은 대기 상태를 보이고, 5초가 지나면
   await pane.unmount()
 })
 
-test('검증: 실행 직후 다시 대기시켜도 예전 타이머가 대기를 일찍 끝내지 않는다', async ($, on) => {
+test('[상태] 실행 직후 다시 대기시켜도 예전 타이머가 대기를 일찍 끝내지 않는다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
 
@@ -594,14 +598,14 @@ test('검증: 실행 직후 다시 대기시켜도 예전 타이머가 대기를
   await clock.advance(4_000)
   await pane.press({ key: 'commit' }) // 4초: 다시 대기(9초까지)
   await clock.advance(2_000) // 6초: 첫 타이머의 5초가 지났다
-  expect(await label()).toBe('한 번 더: 커밋')
+  expect(await label()).toBe(ARMED_LABEL)
   await clock.advance(4_000) // 10초
-  expect(await label()).toBe('커밋')
+  expect(await label()).toBe(COMMIT_LABEL)
   expect(spy.ran).toEqual(['commit-commands:commit'])
   await pane.unmount()
 })
 
-test('검증: 대기 중인 커밋 버튼을 연달아 눌러도 커밋은 한 번만 실행된다', async ($, on) => {
+test('[상태] 대기 중인 커밋 버튼을 연달아 눌러도 커밋은 한 번만 실행된다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
 
@@ -615,7 +619,7 @@ test('검증: 대기 중인 커밋 버튼을 연달아 눌러도 커밋은 한 �
   await pane.unmount()
 })
 
-test('검증: git 저장소가 아니면 정보 문구만 보이고, 커밋은 막지 않는다', async ($, on) => {
+test('[데이터] git 저장소가 아니면 정보 문구만 보이고, 커밋은 막지 않는다', async ($, on) => {
   const clock = world(on, { git: { status: '', exitCode: 128 } })
 
   await $.session.start(START)
@@ -625,7 +629,7 @@ test('검증: git 저장소가 아니면 정보 문구만 보이고, 커밋은 �
   expect(await pane.find({ type: 'Text', text: /Git 저장소가 아니에요/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /변경 (\d+개|없음)/ })).toBeUndefined()
   await pane.press({ key: 'commit' })
-  expect((await pane.find({ key: 'commit' }))?.props.label).toBe('한 번 더: 커밋')
+  expect((await pane.find({ key: 'commit' }))?.props.label).toBe(ARMED_LABEL)
   await pane.unmount()
 })
 
@@ -634,7 +638,7 @@ for (const [status, hint] of [
   ['## main...origin/main [behind 2]\n', '받을 커밋 2'],
   ['## main...origin/main\n', undefined],
 ] as const) {
-  test(`검증: 원격 상태 ${JSON.stringify(status.split('\n')[0])}`, async ($, on) => {
+  test(`[데이터] 원격 상태 ${JSON.stringify(status.split('\n')[0])}`, async ($, on) => {
     const clock = world(on, { git: { status } })
 
     await $.session.start(START)
@@ -647,7 +651,7 @@ for (const [status, hint] of [
   })
 }
 
-test('검증: 프로젝트 이름이 길면 배너는 칸 안에서 자르고 패널은 한 줄로 줄인다', async ($, on) => {
+test('[레이아웃] 프로젝트 이름이 길면 배너는 칸 안에서 자르고 패널은 한 줄로 줄인다', async ($, on) => {
   const long = 'a-very-long-project-name-that-keeps-going-2026-11-04-980f42'
   const korean = '아주아주아주긴프로젝트이름이계속됩니다'
   const svg = (project: string) =>
@@ -667,36 +671,41 @@ test('검증: 프로젝트 이름이 길면 배너는 칸 안에서 자르고 �
   await pane.unmount()
 })
 
-test('검증: 수정 파일이 늘어나도 최근 8개만 보이고 나머지는 개수로 알려 준다', async ($, on) => {
+test('[사용성] 만진 파일은 기본 4개만 보이고, 전체 보기·접기로 펼친다(이 채팅 목록은 50개까지만 기억)', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const fileButtons = async () => (await pane.findAll({ type: 'Button' })).filter(button => button.key?.startsWith('file:'))
+  const toggle = async () => (await pane.find({ key: 'files-toggle' }))?.props.label
   const edit = async (from: number, to: number) => {
     for (let i = from; i <= to; i++) await $.tool.call({ tool: 'Edit', file_path: `C:/work/p/f${i}.ts`, old_string: 'a', new_string: 'b' })
   }
 
-  await edit(1, 8)
-  expect(await fileButtons()).toHaveLength(8)
-  expect(await pane.find({ type: 'Text', text: /^외 \d+개$/ })).toBeUndefined()
-  await edit(9, 12)
-  const shown = await fileButtons()
-
-  expect(shown).toHaveLength(8)
-  expect(shown[0]?.props.label).toBe('p/f12.ts') // 가장 최근이 맨 위
-  expect((await pane.find({ type: 'Text', text: /^외 \d+개$/ }))?.text).toBe('외 4개')
-  expect(await counter(pane, '수정 파일')).toBe('12')
+  await edit(1, 4)
+  expect(await fileButtons()).toHaveLength(4)
+  expect(await toggle()).toBeUndefined() // 4개 이하면 펼칠 것이 없다
+  await edit(5, 12)
+  expect(await fileButtons()).toHaveLength(4) // 기본은 최근 4개
+  expect((await fileButtons())[0]?.props.label).toBe('p/f12.ts') // 가장 최근이 맨 위
+  expect(await toggle()).toBe('전체 보기 (12)')
+  expect(await pane.find({ type: 'Text', text: '이 채팅 12개' })).toBeDefined()
+  await pane.press({ key: 'files-toggle' })
+  expect(await fileButtons()).toHaveLength(12)
+  expect(await toggle()).toBe('접기')
+  await pane.press({ key: 'files-toggle' })
+  expect(await fileButtons()).toHaveLength(4)
   await edit(13, 60)
-  expect((await pane.find({ type: 'Text', text: /^외 \d+개$/ }))?.text).toBe('외 42개') // 이 채팅 목록은 50개까지만 기억한다
-  expect(await counter(pane, '수정 파일')).toBe('60')
+  await pane.press({ key: 'files-toggle' })
+  expect(await fileButtons()).toHaveLength(50) // 수집 한도는 그대로 50개
+  expect(await counter(pane, '수정 파일')).toBe('60') // 오늘 누적은 따로 센다
   await pane.unmount()
 })
 
 // ── 디자인 검증(추가 시험) ──────────────────────────────────────────────────
 
-test('디자인: 카드·칩 배경은 바탕보다 밝고, 그 위 글자 대비도 4.5 이상이다', async () => {
+test('[레이아웃] 카드·칩 배경은 바탕보다 밝고, 그 위 글자 대비도 4.5 이상이다', async () => {
   expect(lift('#000000', 0.5)).toBe('#808080')
   expect(lift('#ffffff', 0.3)).toBe('#ffffff')
   for (const scene of Object.values(SCENES)) {
@@ -710,14 +719,14 @@ test('디자인: 카드·칩 배경은 바탕보다 밝고, 그 위 글자 대�
   }
 })
 
-test('디자인: 패널 구역이 정해진 순서로 이름표를 달고 나온다', async ($, on) => {
+test('[레이아웃] 패널 구역이 정해진 순서로 이름표를 달고 나온다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const texts = (await pane.findAll({ type: 'Text' })).map(node => node.text)
-  const order = ['음악', '빠른 실행', '사용량', '작업 현황', '이 채팅에서 만진 파일'].map(title => texts.indexOf(title))
+  const order = ['빠른 실행', '사용량', '작업 현황', '이 채팅에서 만진 파일', '음악'].map(title => texts.indexOf(title))
 
   expect(order.every(index => index >= 0)).toBe(true)
   expect([...order].sort((a, b) => a - b)).toEqual(order) // 위에서 아래로 이 순서
@@ -725,27 +734,13 @@ test('디자인: 패널 구역이 정해진 순서로 이름표를 달고 나온
 })
 // ── UI 2차 검증(추가 시험) ────────────────────────────────────────────────────
 
-test('디자인 2차: 구역 배경이 바탕과 카드로 번갈아 나온다', async ($, on) => {
+test('[레이아웃] 만진 파일은 소제목으로 작업 현황 바로 아래에 붙는다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const bands = (await pane.findAll({ type: 'Box' })).filter(node => node.props.paddingY === 'md')
-  const tones = bands.map(node => (node.props.backgroundColor === surfaceOf(SCENES.attic) ? '카드' : '바탕'))
-
-  // 설정 · 음악 · 빠른 실행 · 사용량 · 작업 현황 · 만진 파일
-  expect(tones).toEqual(['바탕', '카드', '바탕', '카드', '바탕', '카드'])
-  await pane.unmount()
-})
-
-test('디자인 2차: 만진 파일은 소제목으로 작업 현황 바로 아래에 붙는다', async ($, on) => {
-  const clock = world(on)
-
-  await $.session.start(START)
-  await clock.settle()
-  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const title = async (text: string) => (await pane.find({ type: 'Text', text }))?.props
+  const title = async (text: string) => (await pane.find({ type: 'Text', text: new RegExp(`^${text}$`) }))?.props // 숨겨진 설명 글자와 섞이지 않게 정확히
   const headline = await title('작업 현황')
   const sub = await title('이 채팅에서 만진 파일')
 
@@ -756,26 +751,28 @@ test('디자인 2차: 만진 파일은 소제목으로 작업 현황 바로 아�
   await pane.unmount()
 })
 
-test('디자인 3차: 빠른 실행은 버튼만 한 줄에 두고, 설명은 늘어놓지 않으며, 커밋 대기에는 안내가 덧붙는다', async ($, on) => {
+test('[사용성] 빠른 실행은 버튼만 한 줄에 두고, 설명은 늘어놓지 않으며, 커밋 대기에는 안내가 덧붙는다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const waiting = async () => (await pane.find({ type: 'Text', text: /5초 안에 누르면 실행/ })) !== undefined
-  const labels = async () => Promise.all(['review', 'commit', 'simplify'].map(async key => (await pane.find({ key }))?.props.label))
+  const waiting = async () => (await pane.find({ type: 'Text', text: /5초 안에 한 번 더 누르면 변경을 커밋해요/ })) !== undefined
+  const labels = async () => Promise.all(QUICK.map(async item => (await pane.find({ key: item.key }))?.props.label))
+  const names = QUICK.map(item => item.label)
 
-  expect(await labels()).toEqual(['리뷰', '커밋', '정리'])
-  expect((await pane.findAll({ type: 'Box' })).filter(node => node.props.minWidth !== undefined)).toHaveLength(0) // 줄마다 칸 폭을 고정하던 방식은 없다
-  expect(await pane.find({ type: 'Text', text: /코드 검토|변경 저장|코드 다듬기/ })).toBeUndefined() // 설명은 "?"에만 있다
+  expect(names).toEqual(['코드 리뷰', '변경 커밋', '코드 정리']) // 무엇을 하는 버튼인지 이름만으로 알 수 있다
+  expect(await labels()).toEqual(names)
+  expect((await pane.findAll({ type: 'Box' })).filter(node => node.props.minWidth !== undefined)).toHaveLength(0)
+  expect(await pane.find({ type: 'Text', text: /^(바뀐 코드를 검토해요|코드를 다듬어요)$/ })).toBeUndefined() // 설명은 "?"에만 있다
   expect(await waiting()).toBe(false)
   await pane.press({ key: 'commit' })
-  expect(await labels()).toEqual(['리뷰', '한 번 더: 커밋', '정리'])
+  expect(await labels()).toEqual([names[0], ARMED_LABEL, names[2]]) // 대기 중에도 다른 버튼 라벨은 그대로, 줄 길이도 비슷하다
   expect(await waiting()).toBe(true)
   await pane.unmount()
 })
 
-test('디자인 2차: 좁은 패널에서 줄바꿈되는 줄과 긴 파일명 처리', async ($, on) => {
+test('[레이아웃] 좁은 패널에서 줄바꿈되는 줄과 긴 파일명 처리', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
@@ -793,7 +790,7 @@ test('디자인 2차: 좁은 패널에서 줄바꿈되는 줄과 긴 파일명 �
 
 // ── 모드/장면 통합 검증(추가 시험) ────────────────────────────────────────────
 
-test('장면 통합: 선택 칸은 장면 하나뿐이고 4개 장면이 모두 들어 있다', async ($, on) => {
+test('[기능] 장면 통합: 선택 칸은 장면 하나뿐이고 4개 장면이 모두 들어 있다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
@@ -807,7 +804,7 @@ test('장면 통합: 선택 칸은 장면 하나뿐이고 4개 장면이 모두 
   await pane.unmount()
 })
 
-test('장면 통합: 패널에서 고른 장면에서 ⟳가 이어서 돈다(마지막 다음은 처음)', async ($, on) => {
+test('[기능] 장면 통합: 패널에서 고른 장면에서 ⟳가 이어서 돈다(마지막 다음은 처음)', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
@@ -825,7 +822,7 @@ test('장면 통합: 패널에서 고른 장면에서 ⟳가 이어서 돈다(�
   await banner.unmount()
 })
 
-test('장면 통합: 예전 버전이 저장한 모드·장면 설정도 그대로 읽는다', async ($, on) => {
+test('[데이터] 장면 통합: 예전 버전이 저장한 모드·장면 설정도 그대로 읽는다', async ($, on) => {
   const saved = { mode: 'adventure', sceneByMode: { cozy: 'tearoom', adventure: 'neon' } }
   const clock = world(on, { stored: { mood: saved } })
 
@@ -839,7 +836,7 @@ test('장면 통합: 예전 버전이 저장한 모드·장면 설정도 그대�
 
 // ── 3차 검증(추가 시험): 원형 사용량, 도움말(?), 제목 블록 제거 ─────────────────────
 
-test('사용량 원: 컨텍스트·5시간·주간 3개가 한 줄에 순서대로 나온다', async () => {
+test('[데이터] 사용량 원: 컨텍스트·5시간·주간 3개가 한 줄에 순서대로 나온다', async () => {
   const usage = {
     percent: 42,
     tokens: 84000,
@@ -855,16 +852,17 @@ test('사용량 원: 컨텍스트·5시간·주간 3개가 한 줄에 순서대�
   expect(svg.match(/<path /g)).toHaveLength(60) // 원 3개 × 칸 20개
   expect(filledSegments(svg)).toBe(8 + 5 + 1) // 42% → 8칸, 23.5% → 5칸, 7% → 1칸
   // 왼쪽부터 컨텍스트, 5시간, 주간
-  expect(at('>촛불<')).toBeGreaterThan(-1)
-  expect(at('>촛불<')).toBeLessThan(at('>오늘의 의뢰 · 5H<'))
-  expect(at('>오늘의 의뢰 · 5H<')).toBeLessThan(at('>길드 장부 · 주간<'))
+  expect(at('>컨텍스트<')).toBeGreaterThan(-1)
+  expect(at('>컨텍스트<')).toBeLessThan(at('>5시간 한도<'))
+  expect(at('>5시간 한도<')).toBeLessThan(at('>주간 한도<'))
+  for (const theme of ['촛불', '오늘의 의뢰', '길드 장부']) expect(svg).toContain(`>${theme}<`) // 테마 이름은 보조로 함께
   expect(svg).toContain('>84k/200k<')
   expect(svg).toContain('>1h 37m 뒤 리셋<')
   expect(svg).toContain('>2d 3h 뒤 리셋<')
   expect(usageSvg(SCENES.attic, null, NOON)).toContain('>-<') // 값이 없으면 0%처럼 보이지 않는다
 })
 
-test('제목 블록: 패널 그림은 296px로 잘려 있고 제목·모토 글자를 그리지 않는다', async ($, on) => {
+test('[레이아웃] 제목 블록: 패널 그림은 296px로 잘려 있고 제목·모토 글자를 그리지 않는다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
@@ -877,7 +875,7 @@ test('제목 블록: 패널 그림은 296px로 잘려 있고 제목·모토 글�
   await pane.unmount()
 })
 
-test('도움말: ? 6곳이 있고, 설명 창은 평소 숨겨져 있으며, 눌러도 같은 설명이 뜬다', async ($, on) => {
+test('[사용성] 도움말: 항목마다 ? 하나와 숨겨진 설명 창이 짝을 이루고, 눌러도 같은 설명이 뜬다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
 
@@ -886,17 +884,155 @@ test('도움말: ? 6곳이 있고, 설명 창은 평소 숨겨져 있으며, 눌
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const marks = (await pane.findAll({ type: 'Button' })).filter(button => button.key?.startsWith('help:'))
   const tips = (await pane.findAll({ type: 'Box' })).filter(node => node.props.display === 'none')
+  const ids = marks.map(button => String(button.key).slice('help:'.length))
 
-  expect(marks.map(button => String(button.key).slice('help:'.length))).toEqual(['scene', 'music', 'quick', 'usage', 'status', 'files'])
+  expect([...ids].sort()).toEqual(Object.keys(HELP).sort()) // HELP에 적은 항목이 모두, 그리고 그것만 화면에 있다
+  expect(tips).toHaveLength(ids.length) // ? 하나에 설명 창 하나
   expect(marks.every(button => button.props.label === '?')).toBe(true)
-  // 설명 창: 평소엔 숨김(display none), 위치는 "?" 옆에 띄운 절대 위치, 폭은 직접 정한다.
-  expect(tips).toHaveLength(6)
   expect(tips.every(tip => tip.props.position === 'absolute' && tip.props.right === 0 && typeof tip.props.width === 'number')).toBe(true)
-  // 설명 글자는 있다(올리면 보인다). 빠른 실행의 세 버튼 설명과 커밋의 두 번 누르기 안내가 들어 있다.
   for (const line of HELP.quick) expect(await pane.find({ type: 'Text', text: line })).toBeDefined()
   expect(HELP.quick.join(' ')).toContain('두 번 눌러야 실행')
-  // 눌러도 같은 설명이 알림으로 뜬다(마우스 없이 볼 수 있게).
+  expect(Object.keys(HELP)).not.toContain('files') // 한 줄이면 되는 안내는 화면에 직접 적는다
   await pane.press({ key: 'help:quick' })
   expect(spy.toasts).toContain(HELP.quick.join(' · '))
   await pane.unmount()
 })
+
+// ── UX 개선 시험: 음악 실패, 파일 목록, 데이터 구분, 사용량 규칙, 장면 호환 ─────────────────
+
+test('[상태] 음악: 재생기를 켜지 못하면 연결 실패로 보이고, ▶로 다시 시도한다', async ($, on) => {
+  const spy = newSpy()
+  const clock = world(on, { spy })
+  const seen: Env[] = []
+
+  // eslint-disable-next-line require-yield
+  on('process.spawn', async function* () {
+    throw new Error('spawn failed')
+  })
+  await $.session.start(START)
+  await clock.settle()
+  const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패)$/ }))?.text
+
+  expect(await status()).toBe('○ 멈춤')
+  await banner.press({ key: 'music' })
+  expect(await status()).toBe('✕ 연결 실패')
+  expect(await pane.find({ type: 'Text', text: /Windows에서만/ })).toBeDefined() // 이유가 한 줄 붙는다
+  expect((await pane.find({ key: 'radio' }))?.props.label).toBe('▶ 다시 시도')
+  expect((await banner.find({ key: 'music' }))?.props.label).toBe('▶') // 배너 버튼도 다시 누를 수 있다
+  expect(spy.toasts.some(text => text.includes('음악을 켜지 못했어요'))).toBe(true)
+  expect(seen).toHaveLength(0)
+  await pane.unmount()
+  await banner.unmount()
+})
+
+test('[상태] 음악: 재생기가 저절로 끝나면 연결 실패, 새 시도는 실패 표시를 지운다', async ($, on) => {
+  const spy = newSpy()
+  const clock = world(on, { spy })
+  let attempts = 0
+
+  on('process.spawn', async function* () {
+    attempts += 1
+    yield { stream: 'stdout', text: 'connecting\n' }
+    if (attempts === 1) return { value: { code: 0, signal: null } } // 첫 시도: 재생기가 곧바로 끝난다
+    yield { stream: 'stdout', text: 'playing\n' }
+    for (;;) {
+      await clock.sleep(500)
+      yield { stream: 'stdout', text: '.\n' }
+    }
+  })
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패)$/ }))?.text
+
+  await pane.press({ key: 'radio' })
+  await clock.settle()
+  expect(await status()).toBe('✕ 연결 실패')
+  expect(spy.toasts.some(text => text.includes('음악 연결 실패'))).toBe(true)
+  await pane.press({ key: 'radio' }) // 다시 시도
+  expect(await status()).toBe('● 재생 중')
+  expect(await pane.find({ type: 'Text', text: /재생기가 멈췄어요/ })).toBeUndefined() // 옛 실패 이유는 지워진다
+  await pane.press({ key: 'radio' })
+  await clock.advance(1000)
+  await pane.unmount()
+})
+
+test('[상태] 음악: 실패한 뒤에는 장면을 바꾸면 표시가 지워지고, 음량을 바꿔도 저절로 다시 켜지 않는다', async ($, on) => {
+  const clock = world(on)
+  let spawns = 0
+
+  // eslint-disable-next-line require-yield
+  on('process.spawn', async function* () {
+    spawns += 1
+    throw new Error('nope')
+  })
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const status = async () => (await pane.find({ type: 'Text', text: /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패)$/ }))?.text
+
+  await pane.press({ key: 'radio' })
+  expect(await status()).toBe('✕ 연결 실패')
+  expect(spawns).toBe(1)
+  await pane.press({ key: 'volume-up' })
+  expect(spawns).toBe(1) // 켜져 있을 때만 새 음량으로 다시 켠다
+  await pane.select({ key: 'scene', value: 'dungeon' })
+  expect(await status()).toBe('○ 멈춤')
+  expect(spawns).toBe(1)
+  await pane.unmount()
+})
+
+test('[데이터] 오늘 수정 파일(오늘 누적)과 이 채팅에서 만진 파일은 서로 다른 값이다', async ($, on) => {
+  const earlier = { date: '2026-11-4', prompts: 5, actions: 9, files: ['C:/a.ts', 'C:/b.ts', 'C:/c.ts'] } // 앞선 채팅들의 오늘 기록
+  const clock = world(on, { stored: { today: earlier } })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const fileButtons = async () => (await pane.findAll({ type: 'Button' })).filter(button => button.key?.startsWith('file:'))
+
+  expect(await counter(pane, '수정 파일')).toBe('3')
+  expect(await fileButtons()).toHaveLength(0) // 이 채팅에서는 아직 아무것도 만지지 않았다
+  expect(await pane.find({ type: 'Text', text: '이 채팅 0개' })).toBeDefined()
+  await $.tool.call({ tool: 'Edit', file_path: 'C:/work/p/d.ts', old_string: 'a', new_string: 'b' })
+  expect(await counter(pane, '수정 파일')).toBe('4')
+  expect(await fileButtons()).toHaveLength(1)
+  expect(await pane.find({ type: 'Text', text: /^오늘 누적$/ })).toBeDefined() // 숫자 칸 위에 "오늘 누적"
+  expect(await pane.find({ type: 'Text', text: /^이 채팅에서 만진 파일$/ })).toBeDefined()
+  expect(HELP.status.join(' ')).toContain('이 채팅에서만 모은 목록') // 차이는 도움말에도 적혀 있다
+  await pane.unmount()
+})
+
+test('[데이터] 사용량 원의 칸 수: 5% 단위 오차 규칙(최대 2.5%p, 가장자리는 5%p 이내)', async () => {
+  expect([0, 0.4, 2.4, 3, 50, 85, 97.4, 98, 99.9, 100, 120].map(segmentsFor)).toEqual([0, 1, 1, 1, 10, 17, 19, 19, 19, 20, 20])
+  for (let percent = 0; percent <= 100; percent += 0.5) {
+    const error = Math.abs(segmentsFor(percent) * 5 - percent)
+
+    if (percent > 0 && percent < 100) expect(segmentsFor(percent), `${percent}%는 한 칸 이상`).toBeGreaterThanOrEqual(1)
+    if (percent < 100) expect(segmentsFor(percent), `${percent}%는 꽉 찬 원이 아니다`).toBeLessThan(20)
+    expect(error, `${percent}% 오차`).toBeLessThanOrEqual(percent >= 2.5 && percent < 97.5 ? 2.5 : 5)
+  }
+})
+
+for (const id of ['attic', 'tearoom', 'dungeon', 'neon'] as const) {
+  test(`[레이아웃] 장면 ${id}: 패널과 사용량 원이 기능 이름·테마 이름과 함께 그려진다`, async ($, on) => {
+    const mood = { mode: SCENES[id].mode, sceneByMode: { cozy: 'attic', adventure: 'dungeon', [SCENES[id].mode]: id } }
+    const clock = world(on, { stored: { mood } })
+
+    await $.session.start(START)
+    await clock.settle()
+    const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    const svgs = await pane.findAll({ type: 'Svg' })
+
+    expect(String(svgs[0]?.props.alt)).toContain(SCENES[id].title)
+    expect(svgs[0]?.props.height).toBe(296)
+    expect(String(svgs[1]?.props.source)).toContain('>컨텍스트<')
+    for (const name of [SCENES[id].gauges.context, SCENES[id].gauges.fiveHour, SCENES[id].gauges.week]) {
+      expect(String(svgs[1]?.props.source), `${id} ${name}`).toContain(`>${name.split(' · ')[0]}<`)
+    }
+    expect((await pane.find({ type: 'Text', text: SCENES[id].music.label }))?.text).toBe(SCENES[id].music.label)
+    await pane.unmount()
+  })
+}
