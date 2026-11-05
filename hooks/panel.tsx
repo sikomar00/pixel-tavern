@@ -14,7 +14,7 @@ import { MODES, SCENES } from './scenes'
 import { WARN_COLOR, clip } from './svg'
 import { SPACE, chipOf, surfaceOf } from './theme'
 import type { Gap } from './theme'
-import { USAGE_HEIGHT, usageSvg, usageWidthFor } from './usage'
+import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
 import { MAX_VOLUME } from './volume'
 
 export type PanelData = BannerData & {
@@ -27,6 +27,7 @@ export type PanelData = BannerData & {
   isFilesOpen: boolean
   isCommitArmed: boolean
   volume: number
+  collapsed: string[]
 }
 
 type Ui = Elements['desktop']
@@ -35,18 +36,23 @@ type Ui = Elements['desktop']
  * 위에서 아래로: 장면(히어로) → 빠른 실행 → 사용량 → 작업 현황 → 만진 파일 → 음악.
  * 자주 쓰는 것(실행·사용량)이 위에 오고, 음악은 배너의 ▶/■로 늘 켜고 끌 수 있어서 맨 아래에 둔다.
  *
+ * 접기: 그림·사용량·작업 현황·만진 파일·음악은 머리글 왼쪽의 ▾/▸로 접고 편다(상태는 기억한다).
+ * 접으면 머리글 한 줄만 남고, 오른쪽에 그 구역의 한 줄 요약이 보인다. 작업 현황의 커밋 로그는 따로 접는다(기본은 접힘).
+ *
  * 글자 위계(4단계)
  *   머리글  body·semibold·강조색        구역의 이름
  *   주요    heading·semibold·밝은 글자   방송 이름, 프로젝트 이름 (실측: heading 15px은 body 14px보다 1px만 커서 굵기로 구분한다)
  *           title·bold·강조색           숫자 칸의 숫자 (실측 22px: 한눈에 들어와야 하는 값)
  *   보조    body/footnote·흐린 글자      상태, 안내
- *   메타    caption·흐린 글자           커밋 로그, 개수
+ *   메타    caption·흐린 글자           커밋 로그, 개수, 접었을 때의 요약
  * 카드(바탕보다 한 단계 밝은 배경)는 데이터를 담는 사용량과 만진 파일 목록에만 쓴다. 나머지는 바탕 위의 띠다.
  * 설명은 화면에 늘어놓지 않고 필요한 머리글 오른쪽의 "?"에 둔다(help.tsx).
  */
 const FILES_COLLAPSED = 4 // 파일 목록의 기본 노출 수(전체 보기를 누르면 모두)
 const SCENE_WIDTH = 340
 const SCENE_HEIGHT = 296 // 그림은 74줄까지(칸 4배)
+
+const isFolded = (d: PanelData, id: string): boolean => d.collapsed.includes(id)
 
 /** 구역: 전체 폭, 위아래 여백. 안쪽 좌우 여백은 inset이 만든다(전체 폭 그림은 그 바깥에 둔다). */
 const band = (ui: Ui, background: string, children: unknown[]) => {
@@ -76,7 +82,25 @@ const mark = (ui: Ui, d: PanelData, act: Actions, id: HelpId) =>
 /** 펼쳐진 설명(열려 있을 때만). 머리글 아래 안쪽 여백 목록에 이어 붙인다. */
 const cardOf = (ui: Ui, d: PanelData, id: HelpId): unknown[] => (d.openHelp === id ? [helpCard(ui, { scene: d.scene, id })] : [])
 
-/** 제목 줄: 왼쪽은 제목, 오른쪽은 개수·"?" 같은 덧붙임. */
+/** 접기/펴기 표시(머리글 왼쪽). 접혀 있으면 ▸, 펴져 있으면 ▾. */
+const chevron = (ui: Ui, d: PanelData, act: Actions, id: string) => {
+  const { Button } = ui
+
+  return <Button key={`fold:${id}`} plain label={isFolded(d, id) ? '▸' : '▾'} onPress={() => act.toggleSection(id)} />
+}
+
+/** 접었을 때 머리글 오른쪽에 보이는 한 줄 요약. */
+const summary = (ui: Ui, d: PanelData, text: string) => {
+  const { Text } = ui
+
+  return (
+    <Text color={d.scene.muted} size="caption" wrap="truncate-end">
+      {text}
+    </Text>
+  )
+}
+
+/** 제목 줄: 왼쪽은 제목, 오른쪽은 개수·요약·"?" 같은 덧붙임. */
 const titleRow = (ui: Ui, title: unknown, trailing: unknown[]) => {
   const { Box } = ui
 
@@ -90,35 +114,33 @@ const titleRow = (ui: Ui, title: unknown, trailing: unknown[]) => {
   )
 }
 
-/** 머리글: 구역의 이름. */
-const header = (ui: Ui, d: PanelData, title: string, trailing: unknown[] = []) => {
-  const { Text } = ui
+type HeaderSpec = { title: string; lead?: unknown[]; trailing?: unknown[]; isSub?: boolean }
 
-  return titleRow(
-    ui,
-    <Text color={d.scene.accent} weight="semibold">
-      {title}
-    </Text>,
-    trailing,
-  )
-}
-
-/** 소제목: 구역 안의 한 단계 아래 묶음(프로젝트의 파일 목록). 머리글보다 조용하다. */
-const subheader = (ui: Ui, d: PanelData, title: string, trailing: unknown[] = []) => {
-  const { Text } = ui
-
-  return titleRow(
-    ui,
+/** 머리글(구역의 이름). isSub이면 소제목: 구역 안의 한 단계 아래 묶음이라 머리글보다 조용하다. */
+const header = (ui: Ui, d: PanelData, { title, lead = [], trailing = [], isSub = false }: HeaderSpec) => {
+  const { Box, Text } = ui
+  const text = isSub ? (
     <Text color={d.scene.muted} weight="semibold" size="footnote">
       {title}
-    </Text>,
+    </Text>
+  ) : (
+    <Text color={d.scene.accent} weight="semibold">
+      {title}
+    </Text>
+  )
+
+  return titleRow(
+    ui,
+    <Box flexDirection="row" alignItems="center" gap={SPACE.line}>
+      {[...lead, text]}
+    </Box>,
     trailing,
   )
 }
 
-/** 영역 1: 장면 선택. 테마는 4개뿐이라 모드 없이 하나로 고른다. 오른쪽 "?"는 배너 버튼까지 설명한다. */
+/** 영역 1: 장면 선택. 테마는 4개뿐이라 모드 없이 하나로 고른다. 오른쪽에 그림 접기와 "?"(배너 버튼까지 설명). */
 const settings = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Select } = ui
+  const { Box, Button, Select } = ui
   const ids = MODES.flatMap(entry => entry.scenes)
 
   return band(ui, d.scene.base, [
@@ -133,6 +155,7 @@ const settings = (ui: Ui, d: PanelData, act: Actions) => {
             onSelect={value => act.setScene(value as SceneId)}
           />
         </Box>
+        <Button key="fold:art" plain label={isFolded(d, 'art') ? '그림 ▸' : '그림 ▾'} onPress={() => act.toggleSection('art')} />
         {mark(ui, d, act, 'scene')}
       </Box>,
       ...cardOf(ui, d, 'scene'),
@@ -162,7 +185,7 @@ const quick = (ui: Ui, d: PanelData, act: Actions) => {
   ]
 
   return band(ui, d.scene.base, [
-    inset(ui, [header(ui, d, '빠른 실행', [mark(ui, d, act, 'quick')]), ...cardOf(ui, d, 'quick')]),
+    inset(ui, [header(ui, d, { title: '빠른 실행', trailing: [mark(ui, d, act, 'quick')] }), ...cardOf(ui, d, 'quick')]),
     inset(
       ui,
       [
@@ -193,20 +216,32 @@ const usageNotes = (ui: Ui, d: PanelData) => {
       ]
 }
 
-/** 영역 2: 사용량 카드. 컨텍스트·5시간 한도·주간 한도를 원 3개로 한 줄에. 그림은 전체 폭으로 그려서 글자가 줄어들지 않게 한다. */
+/** 영역 2: 사용량 카드. 컨텍스트·5시간 한도·주간 한도를 원 3개로 한 줄에. 접으면 한 줄 요약만 남는다. */
 const usage = (ui: Ui, d: PanelData, act: Actions) => {
   const { Svg } = ui
   const width = usageWidthFor(d.frame.columns) // 패널 폭에 맞춘다(그림은 앱에서 줄어들지 않는다)
+  const folded = isFolded(d, 'usage')
 
   return band(ui, surfaceOf(d.scene), [
-    inset(ui, [header(ui, d, '사용량', [mark(ui, d, act, 'usage')]), ...cardOf(ui, d, 'usage')]),
-    <Svg
-      source={usageSvg(d.scene, d.usage, d.now, width)}
-      alt="컨텍스트, 5시간 한도, 주간 한도 사용량. 원은 쓴 양이에요"
-      width={width}
-      height={USAGE_HEIGHT}
-    />,
-    ...usageNotes(ui, d),
+    inset(ui, [
+      header(ui, d, {
+        title: '사용량',
+        lead: [chevron(ui, d, act, 'usage')],
+        trailing: [folded ? summary(ui, d, usageSummary(d.scene, d.usage, d.now)) : mark(ui, d, act, 'usage')],
+      }),
+      ...(folded ? [] : cardOf(ui, d, 'usage')),
+    ]),
+    ...(folded
+      ? []
+      : [
+          <Svg
+            source={usageSvg(d.scene, d.usage, d.now, width)}
+            alt="컨텍스트, 5시간 한도, 주간 한도 사용량. 원은 쓴 양이에요"
+            width={width}
+            height={USAGE_HEIGHT}
+          />,
+          ...usageNotes(ui, d),
+        ]),
   ])
 }
 
@@ -221,9 +256,9 @@ const chip = (ui: Ui, d: PanelData, child: unknown) => {
   )
 }
 
-/** git 저장소가 아니면 오류가 아니라 정보로 보여 준다. */
-const gitRows = (ui: Ui, d: PanelData) => {
-  const { Box, Text } = ui
+/** git 저장소가 아니면 오류가 아니라 정보로 보여 준다. 최근 커밋 로그는 따로 접는다(기본은 접힘). */
+const gitRows = (ui: Ui, d: PanelData, act: Actions) => {
+  const { Box, Button, Text } = ui
   const { git, scene } = d
 
   if (git === null) {
@@ -235,6 +270,7 @@ const gitRows = (ui: Ui, d: PanelData) => {
   }
   const sync = [git.ahead > 0 ? `올릴 커밋 ${git.ahead}` : '', git.behind > 0 ? `받을 커밋 ${git.behind}` : '']
   const hint = sync.filter(Boolean).join(' · ')
+  const isLogFolded = isFolded(d, 'commits')
 
   return [
     <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
@@ -256,11 +292,23 @@ const gitRows = (ui: Ui, d: PanelData) => {
             {hint}
           </Text>,
         ]),
-    ...git.commits.map(c => (
-      <Text color={scene.muted} size="caption" mono>
-        {c.hash} {clip(c.subject, 38)}
-      </Text>
-    )),
+    ...(git.commits.length === 0
+      ? []
+      : [
+          <Button
+            key="fold:commits"
+            plain
+            label={`${isLogFolded ? '▸' : '▾'} 최근 커밋 ${git.commits.length}개`}
+            onPress={() => act.toggleSection('commits')}
+          />,
+        ]),
+    ...(isLogFolded
+      ? []
+      : git.commits.map(c => (
+          <Text color={scene.muted} size="caption" mono>
+            {c.hash} {clip(c.subject, 38)}
+          </Text>
+        ))),
   ]
 }
 
@@ -280,29 +328,48 @@ const counter = (ui: Ui, d: PanelData, value: number, label: string) => {
   )
 }
 
+/** 접은 작업 현황의 한 줄 요약: 프로젝트 이름과 git 상태. */
+const statusSummary = (d: PanelData): string => {
+  const where = d.git === null ? 'Git 없음' : `${d.git.branch}${d.git.changed > 0 ? ` +${d.git.changed}` : ''}`
+
+  return `${d.project === '' ? '-' : d.project} · ${where}`
+}
+
 /** 영역 3: 작업 현황. 프로젝트 이름(주요) · git 상태(칩) · 오늘 누적 숫자 세 칸. */
 const status = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Text } = ui
   const t = d.today.date === todayKey(d.now) ? d.today : { ...d.today, prompts: 0, actions: 0, files: [] }
+  const folded = isFolded(d, 'status')
 
   return band(ui, d.scene.base, [
-    inset(ui, [header(ui, d, '작업 현황', [mark(ui, d, act, 'status')]), ...cardOf(ui, d, 'status')]),
     inset(ui, [
-      <Text size="heading" weight="semibold" wrap="truncate-end">
-        {d.project === '' ? '-' : d.project}
-      </Text>,
-      ...gitRows(ui, d),
+      header(ui, d, {
+        title: '작업 현황',
+        lead: [chevron(ui, d, act, 'status')],
+        trailing: [folded ? summary(ui, d, statusSummary(d)) : mark(ui, d, act, 'status')],
+      }),
+      ...(folded ? [] : cardOf(ui, d, 'status')),
     ]),
-    inset(ui, [
-      <Text color={d.scene.muted} size="caption">
-        오늘 누적
-      </Text>,
-      <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
-        {counter(ui, d, t.prompts, '프롬프트')}
-        {counter(ui, d, t.actions, '도구 실행')}
-        {counter(ui, d, t.files.length, '수정 파일')}
-      </Box>,
-    ]),
+    ...(folded
+      ? []
+      : [
+          inset(ui, [
+            <Text size="heading" weight="semibold" wrap="truncate-end">
+              {d.project === '' ? '-' : d.project}
+            </Text>,
+            ...gitRows(ui, d, act),
+          ]),
+          inset(ui, [
+            <Text color={d.scene.muted} size="caption">
+              오늘 누적
+            </Text>,
+            <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
+              {counter(ui, d, t.prompts, '프롬프트')}
+              {counter(ui, d, t.actions, '도구 실행')}
+              {counter(ui, d, t.files.length, '수정 파일')}
+            </Box>,
+          ]),
+        ]),
   ])
 }
 
@@ -314,6 +381,7 @@ const files = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
   const recent = [...d.chatFiles].reverse()
   const shown = d.isFilesOpen ? recent : recent.slice(0, FILES_COLLAPSED)
+  const folded = isFolded(d, 'files')
   const rows = shown.map(path => (
     <Box overflow="hidden">
       <Button key={`file:${path}`} plain label={shortPath(path)} onPress={() => act.mentionFile(path)} />
@@ -331,16 +399,21 @@ const files = (ui: Ui, d: PanelData, act: Actions) => {
 
   return band(ui, surfaceOf(d.scene), [
     inset(ui, [
-      subheader(ui, d, '이 채팅에서 만진 파일', [
-        <Text color={d.scene.muted} size="caption">
-          {`이 채팅 ${recent.length}개`}
-        </Text>,
-      ]),
+      header(ui, d, {
+        title: '이 채팅에서 만진 파일',
+        lead: [chevron(ui, d, act, 'files')],
+        trailing: [summary(ui, d, `이 채팅 ${recent.length}개`)],
+        isSub: true,
+      }),
     ]),
-    inset(ui, [
-      ...(rows.length === 0 ? [<Text color={d.scene.muted}>아직 없어요</Text>] : [...hint, ...rows]),
-      ...toggle,
-    ]),
+    ...(folded
+      ? []
+      : [
+          inset(ui, [
+            ...(rows.length === 0 ? [<Text color={d.scene.muted}>아직 없어요</Text>] : [...hint, ...rows]),
+            ...toggle,
+          ]),
+        ]),
   ])
 }
 
@@ -371,19 +444,20 @@ const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
 
 /**
  * 영역 5: 음악 플레이어. 방송 이름(주요) · 상태(보조: 꺼짐/연결 중/재생 중/연결 실패) · 조작(재생·정지, 음량).
- * 실패하면 이유가 한 줄 붙고 버튼이 "다시 시도"가 된다.
+ * 실패하면 이유가 한 줄 붙고 버튼이 "다시 시도"가 된다. 접으면 상태 한 줄만 남는다(배너 ▶/■로 계속 조작할 수 있다).
  */
 const music = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
   const isRunning = d.radio === 'connecting' || d.radio === 'playing'
   const isFailed = d.radio === 'failed'
   const label = isRunning ? '■ 정지' : isFailed ? '▶ 다시 시도' : d.radio === 'other' ? '▶ 여기서 켜기' : '▶ 재생'
+  const folded = isFolded(d, 'music')
 
   // 윈도우가 아니면 음악은 쓸 수 없다: 버튼을 두지 않고 이유만 알린다.
   if (!d.isMusicAvailable) {
     return band(ui, d.scene.base, [
       inset(ui, [
-        header(ui, d, '음악'),
+        header(ui, d, { title: '음악' }),
         <Text color={d.scene.muted} size="footnote">
           음악은 Windows에서만 쓸 수 있어요
         </Text>,
@@ -392,28 +466,39 @@ const music = (ui: Ui, d: PanelData, act: Actions) => {
   }
 
   return band(ui, d.scene.base, [
-    inset(ui, [header(ui, d, '음악', [mark(ui, d, act, 'music')]), ...cardOf(ui, d, 'music')]),
     inset(ui, [
-      <Text size="heading" weight="semibold" wrap="truncate-end">
-        {d.scene.music.label}
-      </Text>,
-      <Text color={isFailed ? WARN_COLOR : isRunning ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
-        {RADIO_STATUS[d.radio]}
-      </Text>,
-      ...(isFailed && d.radioNote !== ''
-        ? [
-            <Text color={d.scene.muted} size="caption">
-              {d.radioNote}
+      header(ui, d, {
+        title: '음악',
+        lead: [chevron(ui, d, act, 'music')],
+        trailing: [folded ? summary(ui, d, RADIO_STATUS[d.radio]) : mark(ui, d, act, 'music')],
+      }),
+      ...(folded ? [] : cardOf(ui, d, 'music')),
+    ]),
+    ...(folded
+      ? []
+      : [
+          inset(ui, [
+            <Text size="heading" weight="semibold" wrap="truncate-end">
+              {d.scene.music.label}
             </Text>,
-          ]
-        : []),
-    ]),
-    inset(ui, [
-      <Box flexDirection="row" alignItems="center" gap={SPACE.control} flexWrap="wrap">
-        <Button key="radio" variant={isRunning ? 'secondary' : 'primary'} label={label} onPress={() => act.toggleRadio()} />
-        {volumeControls(ui, d, act)}
-      </Box>,
-    ]),
+            <Text color={isFailed ? WARN_COLOR : isRunning ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
+              {RADIO_STATUS[d.radio]}
+            </Text>,
+            ...(isFailed && d.radioNote !== ''
+              ? [
+                  <Text color={d.scene.muted} size="caption">
+                    {d.radioNote}
+                  </Text>,
+                ]
+              : []),
+          ]),
+          inset(ui, [
+            <Box flexDirection="row" alignItems="center" gap={SPACE.control} flexWrap="wrap">
+              <Button key="radio" variant={isRunning ? 'secondary' : 'primary'} label={label} onPress={() => act.toggleRadio()} />
+              {volumeControls(ui, d, act)}
+            </Box>,
+          ]),
+        ]),
   ])
 }
 
@@ -425,14 +510,18 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
     <Box flexDirection="column" backgroundColor={d.scene.base} paddingBottom={SPACE.band}>
       {d.isDiag ? [diagBoard(ui, { scene: d.scene, frame: d.frame })] : []}
       {settings(ui, d, act)}
-      <Box backgroundColor={d.scene.base} justifyContent="center">
-        <Svg
-          source={composeScene(ART[d.scene.id], percent)}
-          alt={`${d.scene.title}: ${d.scene.motto}`}
-          width={SCENE_WIDTH}
-          height={SCENE_HEIGHT}
-        />
-      </Box>
+      {isFolded(d, 'art')
+        ? []
+        : [
+            <Box backgroundColor={d.scene.base} justifyContent="center">
+              <Svg
+                source={composeScene(ART[d.scene.id], percent)}
+                alt={`${d.scene.title}: ${d.scene.motto}`}
+                width={SCENE_WIDTH}
+                height={SCENE_HEIGHT}
+              />
+            </Box>,
+          ]}
       {quick(ui, d, act)}
       {usage(ui, d, act)}
       {status(ui, d, act)}

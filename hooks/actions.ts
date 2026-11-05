@@ -6,6 +6,7 @@ import { MODES, SCENES } from './scenes'
 import {
   currentSceneId,
   readArmed,
+  readCollapsed,
   readFilesOpen,
   readGitInfo,
   readMood,
@@ -14,6 +15,7 @@ import {
   refreshGit,
   readRadio,
   writeArmed,
+  writeCollapsed,
   writeFilesOpen,
   writeHidden,
   writeMood,
@@ -47,6 +49,7 @@ export type Actions = {
   setVolume: (level: number) => Promise<void>
   toggleHelp: (id: string) => Promise<void>
   toggleDiag: () => Promise<boolean>
+  toggleSection: (id: string) => Promise<void>
   toggleFiles: () => Promise<void>
 }
 
@@ -136,6 +139,11 @@ export function makeActions($: EngineInterface): Actions {
     // "?"를 누르면 그 설명이 패널 안에서 펼쳐지고, 다시 누르면 접힌다(하나만 열린다).
     toggleHelp: async id => writeOpenHelp($, (await readOpenHelp($)) === id ? '' : id),
     toggleDiag: () => toggleDiag($),
+    toggleSection: async id => {
+      const ids = await readCollapsed($)
+
+      await writeCollapsed($, ids.includes(id) ? ids.filter(entry => entry !== id) : [...ids, id])
+    },
     toggleFiles: async () => writeFilesOpen($, !(await readFilesOpen($))),
     // 음량은 재생기를 켤 때 정해지므로, 켜져 있으면 새 음량으로 다시 켠다.
     setVolume: async level => {

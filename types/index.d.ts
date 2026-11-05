@@ -50,6 +50,7 @@ declare module 'claude-code' {
       isFilesOpen: boolean
       isMusicAvailable: boolean
       isDiag: boolean
+      collapsed: string[]
       openHelp: string
     }
   }

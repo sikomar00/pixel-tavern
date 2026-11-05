@@ -10,6 +10,8 @@ import { DEFAULT_VOLUME, isVolume } from './volume'
 // 엔진의 검사(claude plugin validate)는 atom을 읽고 쓰는 파일 안에서 atom을 찾는다.
 // 그래서 atom은 이 파일에만 두고, 바깥에는 `$`를 받는 함수로만 드러낸다.
 // 모양을 바꾸면 shape 태그를 올린다. 이전 버전이 저장한 값은 기본값으로 읽힌다.
+/** 접어 둔 구역(처음 한 번만 쓰는 기본값). art·usage·status·files·music은 구역, commits는 작업 현황의 커밋 로그. */
+const DEFAULT_COLLAPSED: string[] = ['commits']
 const EMPTY_TODAY: Today = { date: '', prompts: 0, actions: 0, files: [] }
 const mood = atom({ plugin: 'pixel-tavern', key: 'mood' } as const, DEFAULT_MOOD as Mood, { shape: 'mood-1' })
 const today = atom({ plugin: 'pixel-tavern', key: 'today' } as const, EMPTY_TODAY, { shape: 'today-1' })
@@ -28,6 +30,7 @@ const isFilesOpen = atom({ plugin: 'pixel-tavern', key: 'isFilesOpen' } as const
 const isMusicAvailable = atom({ plugin: 'pixel-tavern', key: 'isMusicAvailable' } as const, true)
 const openHelp = atom({ plugin: 'pixel-tavern', key: 'openHelp' } as const, '')
 const isDiag = atom({ plugin: 'pixel-tavern', key: 'isDiag' } as const, false)
+const collapsed = atom({ plugin: 'pixel-tavern', key: 'collapsed' } as const, DEFAULT_COLLAPSED)
 
 export const currentSceneId = (m: Mood): SceneId => m.sceneByMode[m.mode]
 
@@ -44,6 +47,8 @@ export const isMood = (v: unknown): v is Mood => {
     isSceneId(m.sceneByMode?.adventure)
   )
 }
+
+const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(item => typeof item === 'string')
 
 export const isToday = (v: unknown): v is Today => {
   const t = v as Partial<Today> | null
@@ -72,17 +77,19 @@ export const toUsage = (u: {
 
 /** 세션이 시작될 때 저장소에서 기분·숨김·오늘 통계·음량을 불러온다. 모양이 틀린 값은 버린다. */
 export async function loadStored($: EngineInterface): Promise<void> {
-  const [m, hidden, t, level] = await Promise.all([
+  const [m, hidden, t, level, saved] = await Promise.all([
     $.store.get('mood'),
     $.store.get('isHidden'),
     $.store.get('today'),
     $.store.get('volume'),
+    $.store.get('collapsed'),
   ])
 
   if (isMood(m)) await update($, mood, () => m)
   if (typeof hidden === 'boolean') await update($, isHidden, () => hidden)
   if (isToday(t)) await update($, today, () => t)
   if (isVolume(level)) await update($, volume, () => level)
+  if (isStringList(saved)) await update($, collapsed, () => saved)
 }
 
 /** 처음 한 번만 true. 안내 문구를 한 번만 보여 주려는 용도. */
@@ -128,7 +135,7 @@ export async function readView($: EngineInterface) {
 }
 
 export async function readPanel($: EngineInterface) {
-  const [t, files, armed, level, isOpen, help, diag] = await Promise.all([
+  const [t, files, armed, level, isOpen, help, diag, folded] = await Promise.all([
     read($, today),
     read($, chatFiles),
     read($, isCommitArmed),
@@ -136,9 +143,10 @@ export async function readPanel($: EngineInterface) {
     read($, isFilesOpen),
     read($, openHelp),
     read($, isDiag),
+    read($, collapsed),
   ])
 
-  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level, isFilesOpen: isOpen, openHelp: help, isDiag: diag }
+  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level, isFilesOpen: isOpen, openHelp: help, isDiag: diag, collapsed: folded }
 }
 
 export function readHidden($: EngineInterface): Promise<boolean> {
@@ -198,6 +206,16 @@ export async function toggleDiag($: EngineInterface): Promise<boolean> {
   await update($, isDiag, () => next)
 
   return next
+}
+
+export function readCollapsed($: EngineInterface): Promise<string[]> {
+  return read($, collapsed)
+}
+
+/** 접어 둔 구역을 바꾸고 저장소에 남긴다(다음에 열어도 그대로). */
+export async function writeCollapsed($: EngineInterface, ids: string[]): Promise<void> {
+  await update($, collapsed, () => ids)
+  await $.store.set('collapsed', ids)
 }
 
 export function readOpenHelp($: EngineInterface): Promise<string> {

@@ -67,6 +67,12 @@ export const filledSegments = (percent: number): number => {
   return Math.min(SEGMENTS - 1, rounded)
 }
 
+/** 접어 둔 사용량 구역의 머리글에 보이는 한 줄: "컨텍스트 42% · 5시간 23% · 주간 45%". 리셋이 지난 한도는 "리셋됨", 값이 없으면 "-". */
+export const usageSummary = (scene: Scene, usage: Usage | null, now: number): string =>
+  gaugesOf(scene, usage, now)
+    .map((g, i) => `${['컨텍스트', '5시간', '주간'][i]} ${g.isStale === true ? '리셋됨' : g.percent === null ? '-' : `${Math.round(g.percent)}%`}`)
+    .join(' · ')
+
 /** 12시에서 시계 방향으로 도는 호 하나(각도는 도). */
 const arc = (cx: number, from: number, to: number): string => {
   const point = (deg: number): string => {
