@@ -48,6 +48,17 @@ export const isMood = (v: unknown): v is Mood => {
   )
 }
 
+/**
+ * 같은 날의 두 오늘 기록을 합친다: 숫자는 큰 쪽, 파일은 합집합.
+ * 둘 다 늘기만 하는 값이라 이렇게 합쳐도 줄어들지 않는다(채팅이 여럿이거나 갱신이 거의 동시에 와도 기록이 사라지지 않는다).
+ */
+export const mergeToday = (a: Today, b: Today): Today => ({
+  date: a.date,
+  prompts: Math.max(a.prompts, b.prompts),
+  actions: Math.max(a.actions, b.actions),
+  files: [...new Set([...a.files, ...b.files])].slice(-500),
+})
+
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(item => typeof item === 'string')
 
 export const isToday = (v: unknown): v is Today => {
@@ -107,9 +118,17 @@ export async function refreshGit($: EngineInterface): Promise<void> {
   await update($, git, (): GitInfo | null => info)
 }
 
-/** git·한도·모델을 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
+/** 저장소에 있는 오늘 기록(다른 채팅이 더한 것 포함)을 이 채팅의 화면 값에 합친다. 다른 날 기록이면 무시한다. */
+async function syncToday($: EngineInterface): Promise<void> {
+  const shared = await $.store.get('today')
+  const day = todayKey(await $.clock.now())
+
+  if (isToday(shared) && shared.date === day) await update($, today, t => (t.date === day ? mergeToday(t, shared) : shared))
+}
+
+/** git·한도·모델·오늘 기록을 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
 export async function refresh($: EngineInterface): Promise<void> {
-  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($)])
+  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncToday($)])
 
   await update($, usage, () => toUsage(snapshot))
   await update($, model, () => modelId)
@@ -260,13 +279,16 @@ export async function writeProject($: EngineInterface, name: string): Promise<vo
   await update($, project, () => name)
 }
 
-/** 오늘 통계를 고친다. 날짜가 바뀌었으면 0부터 다시 센다. */
+/** 오늘 통계를 고친다. 날짜가 바뀌었으면 0부터 다시 센다. 저장소의 최신 기록(다른 채팅이 더한 것)과 합친 위에 더한다. */
 export async function bumpToday($: EngineInterface, change: (t: Today) => Today): Promise<void> {
   const day = todayKey(await $.clock.now())
+  const shared = await $.store.get('today')
   let saved = EMPTY_TODAY
 
   await update($, today, t => {
-    saved = change(t.date === day ? t : { ...EMPTY_TODAY, date: day })
+    const current = t.date === day ? t : { ...EMPTY_TODAY, date: day }
+
+    saved = change(isToday(shared) && shared.date === day ? mergeToday(current, shared) : current)
 
     return saved
   })
