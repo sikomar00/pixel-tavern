@@ -181,9 +181,9 @@ class Art:
         return out
 
 
-def titles(title: str, motto: str, title_fill: str, muted: str) -> str:
-    """패널 그림 아래쪽 글자: 제목과 모토. 그림은 이 자리를 비워 둔다."""
-    return text(6, 84, title, 6.4, title_fill, 800, "start", 0.3) + text(6, 91, motto, 3.2, muted)
+# 패널 그림은 위에서 이 줄까지만 보여 준다. 그림은 72줄에서 끝나고 그 아래는 빈 바탕이다.
+# 제목·모토는 그리지 않는다(장면 선택 칸과 배너에 이미 있다).
+PANEL_ROWS = 74
 
 
 def make_strip(name: str, base: str, edge: str, emblem, lights: list[str]) -> str:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from artlib import Art, Canvas, MARKER, bayer, blink, frames, make_strip, region_d, shapes, text, titles
+from artlib import Art, Canvas, MARKER, bayer, blink, frames, make_strip, region_d, shapes, text, PANEL_ROWS
 
 W, H = 85, 96
 NAME = "dungeon"
@@ -162,7 +162,7 @@ def emblem(c: Canvas) -> None:
 
 
 def build() -> dict:
-    art = Art(NAME, W, H, BASE)
+    art = Art(NAME, W, PANEL_ROWS, BASE)
     wall = back()
     near = Canvas(W, H)
     for draw in (hud, bottle, torch_and_chest):
@@ -174,7 +174,6 @@ def build() -> dict:
     art.add(near)
     art.add(torch_frames() + sparkles() + blink(73, 55, 1, 1, P["white"], "1;0;0;1", 2.8, 0.6))
     art.add(MARKER)
-    art.add(titles("8비트 던전", "다음 스테이지로", P["green"], P["muted"]))
     return {
         "base": BASE,
         "scene": art.svg(),

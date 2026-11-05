@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from artlib import Art, Canvas, MARKER, blink, frames, make_strip, shapes, text, titles
+from artlib import Art, Canvas, MARKER, blink, frames, make_strip, shapes, text, PANEL_ROWS
 
 W, H = 85, 96
 NAME = "neon"
@@ -157,7 +157,7 @@ def emblem(c: Canvas) -> None:
 
 
 def build() -> dict:
-    art = Art(NAME, W, H, BASE)
+    art = Art(NAME, W, PANEL_ROWS, BASE)
     s = castle()
     back, front = sky(), castle_canvas(s)
     for canvas in (back, front):
@@ -168,7 +168,6 @@ def build() -> dict:
     art.add(front)
     art.add(window_flicker() + bolt_frames())
     art.add(MARKER)
-    art.add(titles("네온 펑크 성", "시끄럽게, 선명하게", P["pink"], P["muted"]))
     return {
         "base": BASE,
         "scene": art.svg(),

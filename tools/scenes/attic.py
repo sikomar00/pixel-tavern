@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import random
 
-from artlib import Art, Canvas, MARKER, bayer, blink, drift, frames, make_strip, region_d, shapes, text, titles
+from artlib import Art, Canvas, MARKER, bayer, blink, drift, frames, make_strip, region_d, shapes, text, PANEL_ROWS
 
 W, H = 85, 96
 NAME = "attic"
@@ -253,7 +253,7 @@ def emblem(c: Canvas) -> None:
 
 
 def build() -> dict:
-    art = Art(NAME, W, H, BASE)
+    art = Art(NAME, W, PANEL_ROWS, BASE)
     clip = art.clip("glass", region_d(GLASS))
     wall, lit = back()
     wall.fade(FADE_FROM, FADE_TO)
@@ -267,7 +267,6 @@ def build() -> dict:
     art.add(near)
     art.add(ahead)
     art.add(MARKER)
-    art.add(titles("비 오는 밤 다락방", "비는 오고, 코드는 따뜻하다", P["amber"], P["muted"]))
     return {
         "base": BASE,
         "scene": art.svg(),

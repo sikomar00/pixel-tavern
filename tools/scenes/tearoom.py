@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 
-from artlib import Art, Canvas, MARKER, frames, make_strip, shapes, text, titles
+from artlib import Art, Canvas, MARKER, frames, make_strip, shapes, text, PANEL_ROWS
 
 W, H = 85, 96
 NAME = "tearoom"
@@ -147,7 +147,7 @@ def emblem(c: Canvas) -> None:
 
 
 def build() -> dict:
-    art = Art(NAME, W, H, BASE)
+    art = Art(NAME, W, PANEL_ROWS, BASE)
     c = Canvas(W, H)
     for draw in (wall, picture, covers, lamp, counter, table):
         draw(c)
@@ -155,7 +155,6 @@ def build() -> dict:
     art.add(c)
     art.add(lamp_halo() + record_frames())
     art.add(MARKER)
-    art.add(titles("7080 다방", "한 잔 더, 한 곡 더", P["amber"], P["muted"]))
     return {
         "base": BASE,
         "scene": art.svg(),
