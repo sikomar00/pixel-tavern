@@ -22,7 +22,14 @@ Claude Code 데스크톱 앱용 모드입니다. 프롬프트 위에 픽셀 배�
 ```
 claude plugin validate .
 claude plugin test .
-python tools/gen_art.py   # 그림 원본(tools/scenes) -> hooks/art
+python tools/gen_art.py      # 그림 원본(tools/scenes) -> hooks/art
+python tools/render_panel.py # 패널을 앱 없이 근사해서 HTML로 그린다(tools/preview/tree-check.html)
 ```
+
+### 실제 앱에서 크기 재기
+
+화면 설계는 실제 폭·간격·글자 크기를 모르면 추정이 됩니다. 앱에서 `/tavern-diag`를 입력하면 패널 맨 위에 측정판이 나옵니다(열·줄 수, px 기준자, 칸 기준자, 간격 단계, 글자 크기, 버튼 표본). 캡처해서 값을 읽고 `tools/measured.json`에 적으면 `render_panel.py`가 그 값으로 그립니다. 다시 `/tavern-diag`를 입력하면 꺼집니다.
+
+측정해 둔 값(데스크톱 앱, `tools/measured.json`): 패널 본문 폭 약 388px(열 51, 글자 칸 하나 약 7.7px), 글자 caption/footnote/body/heading/title = 12/13/14/15/22px, 간격 xs/sm/md/lg/xl = 6/8/12/16/24px, 버튼 높이 약 29px. 그림(SVG)은 선언한 px 그대로 그려지고 패널 안에서 줄어들지 않습니다.
 
 `.claude-plugin/types/`는 엔진이 만드는 파일이라 저장소에 넣지 않았습니다. 라이선스는 아직 정하지 않았습니다.

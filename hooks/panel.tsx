@@ -6,18 +6,22 @@ import type { Actions } from './actions'
 import { ART, composeScene } from './art'
 import type { BannerData } from './banner'
 import { shortPath, todayKey } from './format'
+import { diagBoard } from './diag'
+import type { Frame } from './diag'
 import { helpCard, helpMark } from './help'
 import type { HelpId } from './help'
 import { MODES, SCENES } from './scenes'
 import { WARN_COLOR, clip } from './svg'
 import { SPACE, chipOf, surfaceOf } from './theme'
 import type { Gap } from './theme'
-import { USAGE_HEIGHT, USAGE_WIDTH, usageSvg } from './usage'
+import { USAGE_HEIGHT, usageSvg, usageWidthFor } from './usage'
 import { MAX_VOLUME } from './volume'
 
 export type PanelData = BannerData & {
   radioNote: string
   openHelp: string
+  isDiag: boolean
+  frame: Frame
   today: Today
   chatFiles: string[]
   isFilesOpen: boolean
@@ -33,7 +37,8 @@ type Ui = Elements['desktop']
  *
  * 글자 위계(4단계)
  *   머리글  body·semibold·강조색        구역의 이름
- *   주요    heading·semibold·밝은 글자   방송 이름, 프로젝트 이름, 숫자
+ *   주요    heading·semibold·밝은 글자   방송 이름, 프로젝트 이름 (실측: heading 15px은 body 14px보다 1px만 커서 굵기로 구분한다)
+ *           title·bold·강조색           숫자 칸의 숫자 (실측 22px: 한눈에 들어와야 하는 값)
  *   보조    body/footnote·흐린 글자      상태, 안내
  *   메타    caption·흐린 글자           커밋 로그, 개수
  * 카드(바탕보다 한 단계 밝은 배경)는 데이터를 담는 사용량과 만진 파일 목록에만 쓴다. 나머지는 바탕 위의 띠다.
@@ -191,13 +196,14 @@ const usageNotes = (ui: Ui, d: PanelData) => {
 /** 영역 2: 사용량 카드. 컨텍스트·5시간 한도·주간 한도를 원 3개로 한 줄에. 그림은 전체 폭으로 그려서 글자가 줄어들지 않게 한다. */
 const usage = (ui: Ui, d: PanelData, act: Actions) => {
   const { Svg } = ui
+  const width = usageWidthFor(d.frame.columns) // 패널 폭에 맞춘다(그림은 앱에서 줄어들지 않는다)
 
   return band(ui, surfaceOf(d.scene), [
     inset(ui, [header(ui, d, '사용량', [mark(ui, d, act, 'usage')]), ...cardOf(ui, d, 'usage')]),
     <Svg
-      source={usageSvg(d.scene, d.usage, d.now)}
+      source={usageSvg(d.scene, d.usage, d.now, width)}
       alt="컨텍스트, 5시간 한도, 주간 한도 사용량. 원은 쓴 양이에요"
-      width={USAGE_WIDTH}
+      width={width}
       height={USAGE_HEIGHT}
     />,
     ...usageNotes(ui, d),
@@ -264,7 +270,7 @@ const counter = (ui: Ui, d: PanelData, value: number, label: string) => {
 
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={surfaceOf(d.scene)} paddingX={SPACE.control} paddingY={SPACE.control}>
-      <Text size="heading" weight="bold" color={d.scene.accent} tabular>
+      <Text size="title" weight="bold" color={d.scene.accent} tabular>
         {String(value)}
       </Text>
       <Text size="caption" color={d.scene.muted}>
@@ -417,6 +423,7 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
 
   return (
     <Box flexDirection="column" backgroundColor={d.scene.base} paddingBottom={SPACE.band}>
+      {d.isDiag ? [diagBoard(ui, { scene: d.scene, frame: d.frame })] : []}
       {settings(ui, d, act)}
       <Box backgroundColor={d.scene.base} justifyContent="center">
         <Svg
