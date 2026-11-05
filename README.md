@@ -24,10 +24,12 @@ Claude Code 데스크톱 앱용 모드입니다. 프롬프트 위에 픽셀 배�
 
 ```
 claude plugin validate .
-claude plugin test .
+claude plugin test .         # tests/ 의 시험 전부
 python tools/gen_art.py      # 그림 원본(tools/scenes) -> hooks/art
 python tools/render_panel.py # 패널을 앱 없이 근사해서 HTML로 그린다(tools/preview/tree-check.html)
 ```
+
+시험은 `tests/`에 분류별로 있습니다: `function`(기능), `data`(데이터 정확성), `state`(상태 전환), `layout`(레이아웃), `usability`(사용성). 시험 제목 앞의 `[기능]` 같은 태그도 같은 분류입니다. 가짜 엔진과 공용 도우미는 `tests/kit.tsx`에 있습니다.
 
 ### 실제 앱에서 크기 재기
 
