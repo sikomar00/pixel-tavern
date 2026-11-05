@@ -6,7 +6,7 @@ import { parseLog, parseStatus } from './hooks/git'
 import { bannerSvg } from './hooks/banner'
 import { QUICK } from './hooks/actions'
 import { HELP } from './hooks/help'
-import { filledSegments as segmentsFor, usageSvg } from './hooks/usage'
+import { filledSegments as segmentsFor, usageSvg, usageWidthFor } from './hooks/usage'
 import { MODES, SCENES } from './hooks/scenes'
 import { WARN_COLOR, clipWidth } from './hooks/svg'
 import { TEXT_PRIMARY, chipOf, lift, surfaceOf } from './hooks/theme'
@@ -1168,5 +1168,69 @@ test('[사용성] 윈도우가 아니면 음악 버튼 대신 이유만 보이�
   expect(await pane.find({ key: 'volume-up' })).toBeUndefined()
   expect(await pane.find({ type: 'Text', text: /^음악은 Windows에서만 쓸 수 있어요$/ })).toBeDefined()
   await banner.unmount()
+  await pane.unmount()
+})
+
+// ── P3 시험: 측정판 ───────────────────────────────────────────────────────────
+
+test('[사용성] /tavern-diag: 측정판이 켜지고 꺼지며, 열·줄 수와 px 기준자가 있다', async ($, on) => {
+  const clock = world(on)
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const board = async () => pane.find({ type: 'Text', text: /^측정판/ })
+  const rulers = async () => (await pane.findAll({ type: 'Svg' })).filter(svg => String(svg.props.alt).includes('기준자'))
+
+  expect(await board()).toBeUndefined() // 평소에는 보이지 않는다
+  expect(await rulers()).toHaveLength(0)
+  const on1 = await $.command.run({ command: 'tavern-diag' })
+
+  expect(String((on1 as { text?: string }).text)).toContain('측정판을 켰어요')
+  expect(await board()).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: '열 40 · 줄 20 · dock · desktop' })).toBeDefined() // 렌더 훅이 받은 틀 정보
+  expect((await rulers()).map(svg => svg.props.width)).toEqual([100, 300]) // 선언한 px 그대로
+  // 간격 5단계·글자 5크기 표본이 모두 있다
+  for (const step of ['xs', 'sm', 'md', 'lg', 'xl']) expect(await pane.find({ type: 'Text', text: new RegExp(`^${step}$`) })).toBeDefined()
+  for (const size of ['caption', 'footnote', 'body', 'heading', 'title']) expect(await pane.find({ type: 'Text', text: new RegExp(`^${size} 가나다`) })).toBeDefined()
+  expect(await pane.find({ key: 'quick' })).toBeUndefined() // 측정판의 버튼이 진짜 기능 버튼과 섞이지 않는다
+  const off = await $.command.run({ command: 'tavern-diag' })
+
+  expect(String((off as { text?: string }).text)).toContain('껐어요')
+  expect(await board()).toBeUndefined()
+  expect(await rulers()).toHaveLength(0)
+  await pane.unmount()
+})
+
+// ── 실측 반영 시험: 사용량 그림 폭, 숫자 크기 ─────────────────────────────────────
+
+test('[레이아웃] 사용량 그림 폭은 패널 열 수에 맞추되 기본(340)보다 좁아지지 않고 480을 넘지 않는다', async () => {
+  expect(usageWidthFor(40)).toBe(340) // 좁은 패널: 기본 폭(앱이 줄여 그린다)
+  expect(usageWidthFor(51)).toBe(387) // 실측한 패널(열 51, 칸 7.7px ≈ 394px)에 맞춘다
+  expect(usageWidthFor(200)).toBe(480)
+  const wide = usageSvg(SCENES.attic, null, NOON, 387)
+
+  expect(wide).toContain('viewBox="0 0 387 152"')
+  expect(wide).toContain('width="387"')
+  expect(usageSvg(SCENES.attic, null, NOON)).toContain('viewBox="0 0 340 152"') // 폭을 안 주면 예전과 같다
+  // 세 원이 넓어진 폭을 고르게 나눠 쓴다(가운데 원은 한가운데).
+  expect(wide).toContain('x="193.5"')
+})
+
+test('[레이아웃] 패널 열이 51이면 사용량 그림을 387px로 그리고, 숫자 칸의 숫자는 title 크기다', async ($, on) => {
+  const clock = world(on)
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 51 }, surface: 'desktop' })
+  const svgs = await pane.findAll({ type: 'Svg' })
+
+  expect(svgs[1]?.props.width).toBe(387)
+  expect(String(svgs[1]?.props.source)).toContain('viewBox="0 0 387 152"')
+  expect(svgs[0]?.props.width).toBe(340) // 그림(픽셀 아트)은 4배 그대로: 선명도를 지킨다
+  const texts = await pane.findAll({ type: 'Text' })
+  const index = texts.findIndex(node => node.text === '프롬프트')
+
+  expect(texts[index - 1]?.props.size).toBe('title')
   await pane.unmount()
 })
