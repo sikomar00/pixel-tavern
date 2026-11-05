@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { SceneId } from '../types'
-import { SCENES, STATIONS } from './scenes'
+import { SCENES, STATIONS, STATION_GROUPS } from './scenes'
 import type { Station } from './scenes'
 
 // 방송 고르기: 장면마다 기본 방송(scenes.ts)이 있고, 패널에서 다른 방송을 고르면 장면별로 기억한다.
@@ -10,6 +10,7 @@ import type { Station } from './scenes'
 // 엔진의 검사는 atom을 읽고 쓰는 파일에서 atom을 찾는다: atom은 이 파일에만 두고 바깥에는 `$`를 받는 함수로만 드러낸다.
 const choices = atom({ plugin: 'pixel-tavern', key: 'stationChoices' } as const, {})
 const favorites = atom({ plugin: 'pixel-tavern', key: 'favoriteStations' } as const, [])
+const stationTab = atom({ plugin: 'pixel-tavern', key: 'stationTab' } as const, '') // 보고 있는 묶음(저장하지 않는다)
 
 const isStationId = (value: unknown): value is string => typeof value === 'string' && STATIONS.some(station => station.id === value)
 
@@ -67,12 +68,23 @@ export async function toggleFavorite($: EngineInterface, id: string): Promise<vo
   await $.store.set('favoriteStations', next)
 }
 
-/** 고르는 칸의 선택지: 즐겨찾기가 위로(★), 나머지는 목록 순서. 장면의 기본 방송에는 "· 기본"을 붙인다. */
-export const stationOptions = (stars: string[], defaultId: string): { value: string; label: string }[] => {
-  const isStar = (station: Station) => stars.includes(station.id)
+/** 즐겨찾기 모아 보기 버튼의 이름표(묶음 이름표와 같은 자리에 쓴다). */
+export const FAVORITES_TAB = 'fav'
 
-  return [...STATIONS.filter(isStar), ...STATIONS.filter(station => !isStar(station))].map(station => ({
-    value: station.id,
-    label: `${isStar(station) ? '★ ' : ''}${station.label}${station.id === defaultId ? ' · 기본' : ''}`,
-  }))
+const isTab = (value: unknown): value is string => value === '' || value === FAVORITES_TAB || STATION_GROUPS.some(group => group.id === value)
+
+/** 지금 보이는 묶음: 사용자가 고른 것이 있으면 그것, 없으면 지금 듣는 방송이 속한 묶음. */
+export const tabOf = (picked: string, current: Station): string => (picked === '' ? current.group : picked)
+
+/** 묶음 아래에 보이는 방송(목록 순서). 즐겨찾기 모아 보기는 즐겨찾기한 방송만. */
+export const stationsIn = (tab: string, stars: string[]): Station[] =>
+  tab === FAVORITES_TAB ? STATIONS.filter(station => stars.includes(station.id)) : STATIONS.filter(station => station.group === tab)
+
+export function readStationTab($: EngineInterface): Promise<string> {
+  return read($, stationTab)
+}
+
+/** 보이는 묶음을 바꾼다(빈 글자는 "지금 방송의 묶음"). 저장하지 않는다: 보기만 바꾸는 것이다. */
+export async function showStationTab($: EngineInterface, tab: string): Promise<void> {
+  if (isTab(tab)) await update($, stationTab, () => tab)
 }

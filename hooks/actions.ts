@@ -3,7 +3,8 @@ import type { EngineInterface, Timer } from 'claude-code'
 import type { Mood, QuickKey, RadioState, SceneId } from '../types'
 import { startRadio, stopRadio } from './radio'
 import { MODES, SCENES } from './scenes'
-import { chooseStation, readStation, toggleFavorite } from './stations'
+import { chooseStation, readStation, showStationTab, toggleFavorite } from './stations'
+import { TODOS_MAX, addTodo, clearDoneTodos, starTodo, toggleTodo } from './todos'
 import {
   currentSceneId,
   readArmed,
@@ -60,19 +61,24 @@ const ARM_MS = 5000 // 확인이 필요한 버튼(커밋·정리)을 한 번 누
 export type Actions = {
   openPanel: () => Promise<void>
   shuffle: () => Promise<void>
+  moveScene: (delta: number) => Promise<void>
   setHidden: (hidden: boolean) => Promise<void>
-  setScene: (id: SceneId) => Promise<void>
   quick: (key: QuickKey) => Promise<void>
   mentionFile: (path: string) => Promise<void>
   toggleRadio: () => Promise<void>
   setVolume: (level: number) => Promise<void>
   setStation: (id: string) => Promise<void>
+  showGroup: (tab: string) => Promise<void>
   toggleFavorite: (id: string) => Promise<void>
   toggleHelp: (id: string) => Promise<void>
   toggleDiag: () => Promise<boolean>
   toggleStill: () => Promise<boolean>
   toggleSection: (id: string) => Promise<void>
   toggleFiles: () => Promise<void>
+  addTodo: (text: string) => Promise<void>
+  toggleTodo: (id: string) => Promise<void>
+  starTodo: (id: string) => Promise<void>
+  clearDoneTodos: () => Promise<void>
 }
 
 async function openPane($: EngineInterface): Promise<void> {
@@ -115,11 +121,12 @@ async function pressConfirmed($: EngineInterface, key: QuickKey, emptyMessage: s
   return false
 }
 
-/** 기분을 저장하고, 음악이 켜져 있으면 새 장면의 방송으로 바꾼다. */
+/** 기분을 저장하고, 음악이 켜져 있으면 새 장면의 방송으로 바꾼다. 방송 고르기는 새 장면의 방송이 속한 묶음으로 돌아간다. */
 async function saveMood($: EngineInterface, next: Mood): Promise<void> {
   const before = currentSceneId(await readMood($))
 
   await writeMood($, next)
+  await showStationTab($, '')
 
   if (currentSceneId(next) === before) return
   const radio = await readRadio($)
@@ -136,6 +143,14 @@ export function makeActions($: EngineInterface): Actions {
     await saveMood($, { mode, sceneByMode: { ...m.sceneByMode, [mode]: id } })
   }
 
+  // 장면을 모드와 상관없이 차례로 넘긴다(끝에서 처음으로 이어진다). 배너의 ⟳와 패널의 ◀ ▶가 같은 순서를 쓴다.
+  const moveScene = async (delta: number): Promise<void> => {
+    const ids = MODES.flatMap(entry => entry.scenes)
+    const next = ids[(ids.indexOf(currentSceneId(await readMood($))) + delta + ids.length) % ids.length]
+
+    if (next !== undefined) await setScene(next)
+  }
+
   // 누른 순간부터 진행 상태를 보인다. 명령은 세션이 한가할 때 실행되고, 모델 작업이 시작·끝나는 것은 register의 turn 훅이 알려 준다.
   const run = async (command: string, key: QuickKey): Promise<void> => {
     const seq = await startWaiting($, key)
@@ -150,14 +165,8 @@ export function makeActions($: EngineInterface): Actions {
   }
 
   return {
-    setScene,
-    shuffle: async () => {
-      const m = await readMood($)
-      const ids = MODES.flatMap(entry => entry.scenes) // 4개 장면을 모드와 상관없이 차례로
-      const next = ids[(ids.indexOf(currentSceneId(m)) + 1) % ids.length]
-
-      if (next !== undefined) await setScene(next)
-    },
+    shuffle: () => moveScene(1),
+    moveScene,
     setHidden: hidden => writeHidden($, hidden),
     // "?"를 누르면 그 설명이 패널 안에서 펼쳐지고, 다시 누르면 접힌다(하나만 열린다).
     toggleHelp: async id => writeOpenHelp($, (await readOpenHelp($)) === id ? '' : id),
@@ -188,6 +197,13 @@ export function makeActions($: EngineInterface): Actions {
       else if (radio === 'failed' || radio === 'other') await writeRadio($, 'off')
     },
     toggleFavorite: id => toggleFavorite($, id),
+    addTodo: async text => {
+      if ((await addTodo($, text)) === 'full') $.ui.toast(`할 일은 ${TODOS_MAX}개까지예요. 완료한 것을 지워 주세요`)
+    },
+    toggleTodo: id => toggleTodo($, id),
+    starTodo: id => starTodo($, id),
+    clearDoneTodos: () => clearDoneTodos($),
+    showGroup: tab => showStationTab($, tab),
     // 켜져 있으면 끄고, 꺼져 있거나 실패한 뒤라면 켠다(다시 시도).
     toggleRadio: async () =>
       isRunning(await readRadio($)) ? stopRadio($) : startRadio($, currentSceneId(await readMood($))),

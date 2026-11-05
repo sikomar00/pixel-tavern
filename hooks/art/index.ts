@@ -1,7 +1,13 @@
 import type { SceneId } from '../../types'
+import { arcade } from './arcade'
 import { attic } from './attic'
+import { camp } from './camp'
+import { drive } from './drive'
 import { dungeon } from './dungeon'
+import { jazz } from './jazz'
+import { library } from './library'
 import { neon } from './neon'
+import { station } from './station'
 import { tearoom } from './tearoom'
 
 export type SceneArt = {
@@ -13,7 +19,7 @@ export type SceneArt = {
   strip: string
 }
 
-export const ART: Record<SceneId, SceneArt> = { attic, tearoom, dungeon, neon }
+export const ART: Record<SceneId, SceneArt> = { attic, tearoom, dungeon, neon, jazz, camp, library, arcade, drive, station }
 
 const LEVELS = 20 // 게이지 그림은 5% 단위
 

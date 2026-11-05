@@ -1,6 +1,6 @@
 import type { Elements } from 'claude-code'
 
-import type { ProjectToday, QuickKey, SceneId, Today, Work } from '../types'
+import type { ProjectToday, QuickKey, Todo, Today, Work } from '../types'
 import type { Actions } from './actions'
 import { ART, composeScene } from './art'
 import type { BannerData } from './banner'
@@ -12,9 +12,10 @@ import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from '.
 import { music } from './music'
 import { projectRows } from './projects'
 import { quick } from './quick'
-import { MODES, SCENES } from './scenes'
+import { MODES } from './scenes'
 import { stillSvg } from './still'
 import { SPACE, surfaceOf } from './theme'
+import { todo } from './todo'
 import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
 
 export type PanelData = BannerData & {
@@ -25,6 +26,8 @@ export type PanelData = BannerData & {
   today: Today
   projects: ProjectToday[]
   favorites: string[]
+  stationTab: string
+  todos: Todo[]
   chatFiles: string[]
   isFilesOpen: boolean
   armedKey: QuickKey | null
@@ -56,23 +59,29 @@ const FILES_COLLAPSED = 4 // 파일 목록의 기본 노출 수(전체 보기를
 const SCENE_WIDTH = 340
 const SCENE_HEIGHT = 296 // 그림은 74줄까지(칸 4배)
 
-/** 영역 1: 장면 선택. 테마는 4개뿐이라 모드 없이 하나로 고른다. 오른쪽에 그림 접기·움직임 켬/끔과 "?"(배너 버튼까지 설명). 좁으면 버튼이 다음 줄로 내려간다. */
+/**
+ * 영역 1: 장면 고르기. `◀ 장면 이름 n/N ▶`로 한 장면씩 넘긴다(끝에서 처음으로 이어지고 배너의 ⟳와 같은 순서): 목록을 스크롤하지 않는다.
+ * 아래 줄에 그림 접기·움직임 켬/끔과 "?"(배너 버튼까지 설명). 좁으면 버튼이 다음 줄로 내려간다.
+ */
 const settings = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Button, Select } = ui
+  const { Box, Button, Text } = ui
   const ids = MODES.flatMap(entry => entry.scenes)
 
   return band(ui, d.scene.base, [
     inset(ui, [
-      <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={SPACE.control}>
+      <Box flexDirection="row" alignItems="center" gap={SPACE.control}>
+        <Button key="scene:prev" plain label="◀" onPress={() => act.moveScene(-1)} />
         <Box flexGrow={1}>
-          <Select
-            key="scene"
-            label="장면"
-            options={ids.map(id => ({ value: id, label: SCENES[id].title }))}
-            value={d.scene.id}
-            onSelect={value => act.setScene(value as SceneId)}
-          />
+          <Text size="heading" weight="semibold" wrap="truncate-end">
+            {d.scene.title}
+          </Text>
         </Box>
+        <Text color={d.scene.muted} size="caption">
+          {`${ids.indexOf(d.scene.id) + 1}/${ids.length}`}
+        </Text>
+        <Button key="scene:next" plain label="▶" onPress={() => act.moveScene(1)} />
+      </Box>,
+      <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={SPACE.control}>
         <Button key="fold:art" plain label={isFolded(d, 'art') ? '그림 ▸' : '그림 ▾'} onPress={() => act.toggleSection('art')} />
         <Button key="still" plain label={d.isStill ? '움직임 끔' : '움직임 켬'} onPress={() => act.toggleStill()} />
         {mark(ui, d, act, 'scene')}
@@ -256,6 +265,7 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
           ]}
       {music(ui, d, act)}
       {quick(ui, d, act)}
+      {todo(ui, d, act)}
       {usage(ui, d, act)}
       {status(ui, d, act)}
       {files(ui, d, act)}

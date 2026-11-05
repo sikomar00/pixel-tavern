@@ -1,5 +1,5 @@
 export type ModeId = 'cozy' | 'adventure'
-export type SceneId = 'attic' | 'tearoom' | 'dungeon' | 'neon'
+export type SceneId = 'attic' | 'tearoom' | 'dungeon' | 'neon' | 'jazz' | 'camp' | 'library' | 'arcade' | 'drive' | 'station'
 
 /** 고른 모드와, 모드마다 마지막으로 고른 장면 */
 export type Mood = { mode: ModeId; sceneByMode: Record<ModeId, SceneId> }
@@ -33,6 +33,9 @@ export type Today = { date: string; prompts: number; actions: number; files: str
 
 /** 프로젝트(폴더 이름) 하나의 오늘 통계. 이름이 빈 글자면 프로젝트 이름이 없는 옛 기록이다. */
 export type ProjectToday = Today & { project: string }
+
+/** 할 일 하나. done은 완료(체크), star는 우선 표시. 목록은 새로 더한 것이 맨 앞이다. */
+export type Todo = { id: string; text: string; done: boolean; star: boolean }
 
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
 
@@ -71,6 +74,8 @@ declare module 'claude-code' {
       projects: ProjectToday[]
       stationChoices: Partial<Record<SceneId, string>>
       favoriteStations: string[]
+      stationTab: string
+      todos: Todo[]
       usage: Usage | null
       git: Shaped<GitInfo | null>
       model: string | null

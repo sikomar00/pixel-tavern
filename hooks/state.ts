@@ -7,6 +7,7 @@ import { readGit } from './git'
 import { DEFAULT_MOOD, MODES, SCENES } from './scenes'
 import { addTouchedFile, setOwnProject, syncStats } from './stats'
 import { loadStations, readStation } from './stations'
+import { loadTodos } from './todos'
 import { DEFAULT_VOLUME, isVolume } from './volume'
 
 // 엔진의 검사(claude plugin validate)는 atom을 읽고 쓰는 파일 안에서 atom을 찾는다.
@@ -79,6 +80,7 @@ export async function loadStored($: EngineInterface): Promise<void> {
   if (isVolume(level)) await update($, volume, () => level)
   if (isStringList(saved)) await update($, collapsed, () => saved)
   await loadStations($)
+  await loadTodos($)
   await syncStats($) // 오늘 통계: 다른 채팅과 앞선 실행이 남긴 칸을 읽어 둔다
 }
 
@@ -97,9 +99,9 @@ export async function refreshGit($: EngineInterface): Promise<void> {
   await update($, git, (): GitInfo | null => info)
 }
 
-/** git·한도·모델·오늘 통계를 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
+/** git·한도·모델·오늘 통계·할 일을 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
 export async function refresh($: EngineInterface): Promise<void> {
-  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncStats($)])
+  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncStats($), loadTodos($)])
 
   await update($, usage, () => toUsage(snapshot))
   await update($, model, () => modelId)

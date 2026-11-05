@@ -4,8 +4,8 @@ import type { RadioState } from '../types'
 import type { Actions } from './actions'
 import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import type { PanelData } from './panel'
-import { SCENES } from './scenes'
-import { stationOptions } from './stations'
+import { STATION_GROUPS } from './scenes'
+import { FAVORITES_TAB, stationsIn, tabOf } from './stations'
 import { WARN_COLOR } from './svg'
 import { SPACE, surfaceOf } from './theme'
 import { MAX_VOLUME } from './volume'
@@ -37,26 +37,44 @@ const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
   )
 }
 
-/** 방송 고르기(장면마다 따로 기억한다)와 즐겨찾기 별. 즐겨찾기는 고르는 칸의 맨 위에 별과 함께 놓인다. */
+/**
+ * 방송 고르기(장면마다 따로 기억한다): 묶음 버튼(★ 즐겨찾기 · 잔잔 · 7080 · 게임 · 신스) 한 줄과, 보고 있는 묶음의 방송 버튼들.
+ * 지금 방송은 진한 버튼이고, 즐겨찾기한 방송은 이름 앞에 ★가 붙는다. 한 번에 한 묶음만 보여 버튼이 많지 않다(스크롤이 없다).
+ * 마지막 버튼 `☆ 즐겨찾기`는 지금 방송의 즐겨찾기를 켜고 끈다.
+ */
 const stationPicker = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Button, Select } = ui
-  const station = d.scene.music
-  const isFavorite = d.favorites.includes(station.id)
+  const { Box, Button, Text } = ui
+  const current = d.scene.music
+  const tab = tabOf(d.stationTab, current)
+  const shown = stationsIn(tab, d.favorites)
+  const tabs = [{ id: FAVORITES_TAB, label: '★' }, ...STATION_GROUPS]
 
-  return (
-    <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={SPACE.control}>
-      <Box flexGrow={1}>
-        <Select
-          key="station"
-          label="방송"
-          options={stationOptions(d.favorites, SCENES[d.scene.id].music.id)}
-          value={station.id}
-          onSelect={value => act.setStation(String(value))}
-        />
-      </Box>
-      <Button key="favorite" plain label={isFavorite ? '★ 즐겨찾기' : '☆ 즐겨찾기'} onPress={() => act.toggleFavorite(station.id)} />
-    </Box>
-  )
+  return [
+    <Box flexDirection="row" flexWrap="wrap" gap={SPACE.control}>
+      {tabs.map(entry => (
+        <Button key={`group:${entry.id}`} variant={entry.id === tab ? 'primary' : 'secondary'} label={entry.label} onPress={() => act.showGroup(entry.id)} />
+      ))}
+    </Box>,
+    ...(shown.length === 0
+      ? [
+          <Text color={d.scene.muted} size="caption">
+            즐겨찾기한 방송이 없어요. 방송을 고르고 ☆ 즐겨찾기를 누르세요
+          </Text>,
+        ]
+      : [
+          <Box flexDirection="row" flexWrap="wrap" gap={SPACE.control}>
+            {shown.map(station => (
+              <Button
+                key={`station:${station.id}`}
+                variant={station.id === current.id ? 'primary' : 'secondary'}
+                label={`${d.favorites.includes(station.id) ? '★ ' : ''}${station.short}`}
+                onPress={() => act.setStation(station.id)}
+              />
+            ))}
+          </Box>,
+        ]),
+    <Button key="favorite" plain label={d.favorites.includes(current.id) ? '★ 즐겨찾기' : '☆ 즐겨찾기'} onPress={() => act.toggleFavorite(current.id)} />,
+  ]
 }
 
 /**
@@ -95,7 +113,9 @@ export const music = (ui: Ui, d: PanelData, act: Actions) => {
       ? []
       : [
           inset(ui, [
-            stationPicker(ui, d, act),
+            <Text size="heading" weight="semibold" wrap="truncate-end">
+              {d.scene.music.label}
+            </Text>,
             <Text color={isFailed ? WARN_COLOR : isRunning ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
               {RADIO_STATUS[d.radio]}
             </Text>,
@@ -107,6 +127,7 @@ export const music = (ui: Ui, d: PanelData, act: Actions) => {
                 ]
               : []),
           ]),
+          inset(ui, stationPicker(ui, d, act)),
           inset(ui, [
             <Box flexDirection="row" alignItems="center" gap={SPACE.control} flexWrap="wrap">
               <Button key="radio" variant={isRunning ? 'secondary' : 'primary'} label={label} onPress={() => act.toggleRadio()} />
