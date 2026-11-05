@@ -4,6 +4,7 @@ import type { GitInfo, RadioState, Usage } from '../types'
 import type { Actions } from './actions'
 import { ART } from './art'
 import { fmtReset, fmtTokens, isPast, shortModel } from './format'
+import { GAUGE_NAMES } from './scenes'
 import type { Scene } from './scenes'
 import { clipWidth, svgText, textWidth, WARN_COLOR, WARN_PERCENT } from './svg'
 import { usageSummary } from './usage'
@@ -29,9 +30,7 @@ const PERCENT_SIZE = 3.3
 const SUB_SIZE = 3
 const ROW2_Y = 10.6
 
-const shortName = (name: string): string => name.split(' · ')[0] ?? name
-
-export const gaugesOf = ({ scene, usage, now }: BannerData): Gauge[] => {
+export const gaugesOf = ({ usage, now }: BannerData): Gauge[] => {
   const limit = (kind: string) => usage?.limits.find(l => l.kind === kind)
   const reset = (kind: string): string => {
     const found = limit(kind)
@@ -49,12 +48,12 @@ export const gaugesOf = ({ scene, usage, now }: BannerData): Gauge[] => {
 
   return [
     {
-      name: scene.gauges.context,
+      name: GAUGE_NAMES.context,
       percent: usage?.percent ?? null,
       sub: tokens === null ? '' : `${fmtTokens(tokens)}/${fmtTokens(usage?.window ?? 0)}`,
     },
-    { name: scene.gauges.fiveHour, percent: live('five_hour'), sub: reset('five_hour') },
-    { name: scene.gauges.week, percent: live('seven_day'), sub: reset('seven_day') },
+    { name: GAUGE_NAMES.fiveHour, percent: live('five_hour'), sub: reset('five_hour') },
+    { name: GAUGE_NAMES.week, percent: live('seven_day'), sub: reset('seven_day') },
   ]
 }
 
@@ -65,7 +64,7 @@ const gaugeSvg = (x: number, g: Gauge, scene: Scene): string => {
     `<rect x="${x}" y="6.1" width="${width}" height="1.5" ${fill} shape-rendering="crispEdges"/>`
   const percentText = g.percent === null ? '-' : `${Math.round(g.percent)}%`
   // 이름이 퍼센트(100%까지)와 겹치지 않게, 남는 폭에 맞춰 자른다.
-  const label = clipWidth(shortName(g.name), LABEL_SIZE, BAR_WIDTH - textWidth(percentText, PERCENT_SIZE) - 2)
+  const label = clipWidth(g.name, LABEL_SIZE, BAR_WIDTH - textWidth(percentText, PERCENT_SIZE) - 2)
 
   return (
     svgText(x, 4.9, label, LABEL_SIZE, scene.muted) +
@@ -106,7 +105,7 @@ export const bannerSvg = (d: BannerData): string => {
 
 /** SVG를 못 그리는 화면(터미널 등)과 스크린 리더용 한 줄 글자. */
 export const bannerText = (d: BannerData): string => {
-  const gauges = gaugesOf(d).map(g => `${shortName(g.name)} ${g.percent === null ? '-' : `${Math.round(g.percent)}%`}`)
+  const gauges = gaugesOf(d).map(g => `${g.name} ${g.percent === null ? '-' : `${Math.round(g.percent)}%`}`)
 
   return [d.scene.title, ...gauges, ...(d.git === null ? [] : [d.git.branch])].join(' · ')
 }

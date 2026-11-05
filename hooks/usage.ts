@@ -1,5 +1,6 @@
 import type { Usage } from '../types'
 import { fmtReset, fmtTokens, isPast } from './format'
+import { GAUGE_NAMES } from './scenes'
 import type { Scene } from './scenes'
 import { clipWidth, svgText, WARN_COLOR, WARN_PERCENT } from './svg'
 import { TEXT_PRIMARY } from './theme'
@@ -8,19 +9,17 @@ import { TEXT_PRIMARY } from './theme'
 export const USAGE_WIDTH = 340
 const CELL_PX = 7.6 // 글자 칸 하나의 화면 폭(실측 7.7px, 조금 작게 잡아 패널보다 넓어지지 않게)
 const MAX_WIDTH = 480
-export const USAGE_HEIGHT = 152
+export const USAGE_HEIGHT = 134
 
 const SEGMENTS = 20 // 원 하나를 5% 단위 칸 20개로 나눈다
 const RADIUS = 36
 const STROKE = 9
 const CENTER_Y = 50
 
-/** 기능 이름이 먼저, 테마 이름(장면마다 다름)은 그 아래 작게. 테마 이름만 보고 뜻을 짐작하게 하지 않는다. */
-type Gauge = { name: string; theme: string; percent: number | null; sub: string; isStale?: boolean }
+/** 원 하나: 기능 이름(컨텍스트·5시간 한도·주간 한도), 쓴 %, 그 아래 보조 글(토큰 수 또는 리셋까지 남은 시간). */
+type Gauge = { name: string; percent: number | null; sub: string; isStale?: boolean }
 
-const themeOf = (name: string): string => name.split(' · ')[0] ?? name
-
-const gaugesOf = (scene: Scene, usage: Usage | null, now: number): Gauge[] => {
+const gaugesOf = (usage: Usage | null, now: number): Gauge[] => {
   const limit = (kind: string) => usage?.limits.find(l => l.kind === kind)
   const reset = (kind: string): string => {
     const found = limit(kind)
@@ -30,24 +29,23 @@ const gaugesOf = (scene: Scene, usage: Usage | null, now: number): Gauge[] => {
     return found.resetsAt === undefined ? '리셋 정보 없음' : `${fmtReset(found.resetsAt, now)} 뒤 리셋`
   }
   // 리셋 시각이 지난 한도: 사용량은 옛 값이라 보이지 않고, 다음 응답이 와야 갱신된다.
-  const limitGauge = (kind: string, name: string, theme: string): Gauge => {
+  const limitGauge = (kind: string, name: string): Gauge => {
     const found = limit(kind)
 
-    if (found !== undefined && isPast(found.resetsAt, now)) return { name, theme, percent: null, sub: '응답 후 갱신', isStale: true }
+    if (found !== undefined && isPast(found.resetsAt, now)) return { name, percent: null, sub: '응답 후 갱신', isStale: true }
 
-    return { name, theme, percent: found?.percentUsed ?? null, sub: reset(kind) }
+    return { name, percent: found?.percentUsed ?? null, sub: reset(kind) }
   }
   const tokens = usage?.tokens ?? null
 
   return [
     {
-      name: '컨텍스트',
-      theme: themeOf(scene.gauges.context),
+      name: GAUGE_NAMES.context,
       percent: usage?.percent ?? null,
       sub: tokens === null ? '' : `${fmtTokens(tokens)}/${fmtTokens(usage?.window ?? 0)}`,
     },
-    limitGauge('five_hour', '5시간 한도', themeOf(scene.gauges.fiveHour)),
-    limitGauge('seven_day', '주간 한도', themeOf(scene.gauges.week)),
+    limitGauge('five_hour', `${GAUGE_NAMES.fiveHour} 한도`),
+    limitGauge('seven_day', `${GAUGE_NAMES.week} 한도`),
   ]
 }
 
@@ -69,8 +67,8 @@ export const filledSegments = (percent: number): number => {
 
 /** 접어 둔 사용량 구역의 머리글에 보이는 한 줄: "컨텍스트 42% · 5시간 23% · 주간 45%". 리셋이 지난 한도는 "리셋됨", 값이 없으면 "-". */
 export const usageSummary = (scene: Scene, usage: Usage | null, now: number): string =>
-  gaugesOf(scene, usage, now)
-    .map((g, i) => `${['컨텍스트', '5시간', '주간'][i]} ${g.isStale === true ? '리셋됨' : g.percent === null ? '-' : `${Math.round(g.percent)}%`}`)
+  gaugesOf(usage, now)
+    .map((g, i) => `${[GAUGE_NAMES.context, GAUGE_NAMES.fiveHour, GAUGE_NAMES.week][i]} ${g.isStale === true ? '리셋됨' : g.percent === null ? '-' : `${Math.round(g.percent)}%`}`)
     .join(' · ')
 
 /** 12시에서 시계 방향으로 도는 호 하나(각도는 도). */
@@ -111,18 +109,17 @@ const gaugeSvg = (g: Gauge, index: number, scene: Scene, width: number): string 
       : svgText(cx, CENTER_Y + 6, hasValue ? `${Math.round(percent)}%` : '-', 19, color, 700, 'middle')) +
     (hasValue ? svgText(cx, CENTER_Y + 20, '사용', 11, scene.muted, 400, 'middle') : '') +
     svgText(cx, 108, clipWidth(g.name, 14, nameWidth), 14, TEXT_PRIMARY, 600, 'middle') +
-    svgText(cx, 124, clipWidth(g.theme, 11.5, nameWidth), 11.5, scene.muted, 400, 'middle') +
-    svgText(cx, 143, g.sub, 12.5, scene.muted, 400, 'middle')
+    svgText(cx, 126, g.sub, 12.5, scene.muted, 400, 'middle')
   )
 }
 
 /**
  * 사용량 원 3개를 한 줄에: 컨텍스트 · 5시간 한도 · 주간 한도. 원은 "쓴 양"이다(남은 양이 아니다).
- * 가운데는 쓴 %, 아래는 기능 이름 · 테마 이름 · 토큰 수 또는 리셋까지 남은 시간.
+ * 가운데는 쓴 %, 아래는 기능 이름, 그 아래는 토큰 수 또는 리셋까지 남은 시간.
  */
 export const usageSvg = (scene: Scene, usage: Usage | null, now: number, width = USAGE_WIDTH): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${USAGE_HEIGHT}" width="${width}" height="${USAGE_HEIGHT}">` +
-  gaugesOf(scene, usage, now)
+  gaugesOf(usage, now)
     .map((g, i) => gaugeSvg(g, i, scene, width))
     .join('') +
   '</svg>'
