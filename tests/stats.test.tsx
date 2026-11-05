@@ -2,7 +2,7 @@
 // 옛 방식(모두가 today 키 하나를 읽고-고치고-쓰기)은 10에서 두 채팅이 1씩 늘리면 11이 됐다 — 실제로 재현했다(docs/review 참고).
 import { expect, test } from 'claude-code/testing'
 import { fingerprint } from '../hooks/format'
-import { withFile } from '../hooks/stats'
+import { byProject, withFile } from '../hooks/stats'
 import { PANE, START, counter, slotsOf, world } from './kit'
 
 const DAY = '2026-11-4' // kit의 NOON이 있는 날
@@ -55,7 +55,7 @@ test('[통계] 이 채팅의 기록은 자기 칸에만 쓰고, 다른 채팅의
   await $.prompt.submit({ text: '안녕', origin: { kind: 'composer' } } as never)
   const mine = slotsOf(store, DAY).filter(item => item.actions === 3)
 
-  expect(mine).toEqual([{ date: DAY, prompts: 1, actions: 3, files: [] }])
+  expect(mine).toEqual([{ date: DAY, prompts: 1, actions: 3, files: [], project: 'p' }]) // 프로젝트 폴더 이름(경로 아님)도 함께 남는다
   expect(store[B]).toEqual(slot(2, 5))
   expect(store.today).toEqual(legacy)
   expect(Object.keys(store).filter(key => key.startsWith('today:'))).toHaveLength(2) // B의 칸과 이 채팅의 칸
@@ -187,4 +187,123 @@ test('[통계] 파일 지문: 8자리 16진수이고, 역슬래시·슬래시 �
   const prints = new Set(Array.from({ length: 2000 }, (_, i) => fingerprint(`C:/w/dir${i % 7}/file${i}.ts`)))
 
   expect(prints.size).toBe(2000)
+})
+
+// ── 프로젝트별(R-08): 오늘 통계를 프로젝트(폴더 이름)별로 나눠 보여 준다. 저장하는 것은 폴더 이름뿐이고 경로는 저장하지 않는다. ──
+const slotKey = (id: string) => `today:${DAY}:${id}`
+
+type Part = { date: string; prompts: number; actions: number; files: string[]; project?: string }
+
+const projectSlot = (project: string | undefined, prompts: number, actions: number, files: string[] = []): Part => ({ date: DAY, prompts, actions, files, ...(project === undefined ? {} : { project }) })
+
+const texts = async (pane: { findAll: (q: object) => Promise<{ text?: string }[]> }) => (await pane.findAll({ type: 'Text' })).map(node => node.text)
+
+test('[프로젝트별] 칸들을 폴더 이름별로 묶어 더하고(파일은 합집합), 많이 한 순서로 놓고, 어제 칸은 넣지 않는다', async () => {
+  const parts = [projectSlot('app', 1, 5, ['a', 'b']), projectSlot('lib', 2, 9, ['c']), projectSlot('app', 3, 4, ['b', 'd']), projectSlot('tiny', 0, 1), { ...projectSlot('old', 9, 99), date: '2026-11-3' }]
+
+  expect(byProject(DAY, parts)).toEqual([
+    { date: DAY, prompts: 4, actions: 9, files: ['a', 'b', 'd'], project: 'app' }, // 도구 실행이 같으면(9) 프롬프트가 많은 쪽이 위
+    { date: DAY, prompts: 2, actions: 9, files: ['c'], project: 'lib' },
+    { date: DAY, prompts: 0, actions: 1, files: [], project: 'tiny' },
+  ])
+  expect(byProject(DAY, [])).toEqual([])
+})
+
+test('[프로젝트별] 이름이 없거나 이상한 칸은 빈 이름으로 묶고, 제어 문자는 빼고, 긴 이름은 자르고, 10개까지만 남긴다', async () => {
+  const odd = [projectSlot(undefined, 1, 1), { ...projectSlot('x', 1, 1), project: 42 as never }, projectSlot('a\nb\u0000c', 1, 1), projectSlot('가'.repeat(60), 1, 1)]
+  const found = byProject(DAY, odd)
+
+  expect(found.find(entry => entry.project === '')?.actions).toBe(2) // 이름이 없는 칸과 글자가 아닌 이름이 한 묶음
+  expect(found.map(entry => entry.project)).toContain('abc') // 줄바꿈·NUL을 뺀다
+  expect(found.map(entry => entry.project)).toContain('가'.repeat(40)) // 40글자까지
+  const many = byProject(DAY, Array.from({ length: 12 }, (_, i) => projectSlot(`p${i}`, 0, i + 1)))
+
+  expect(many).toHaveLength(10)
+  expect(many[0]?.project).toBe('p11') // 도구 실행이 가장 많은 프로젝트가 맨 위
+  expect(many[9]?.actions).toBe(3) // 가장 적은 두 개(1, 2)가 밀려난다
+})
+
+test('[프로젝트별] 이 채팅의 칸에는 프로젝트 폴더 이름만 남고 경로는 저장되지 않으며, 날이 바뀌어도 이어진다', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const clock = world(on, { liveStore: store, now: Date.parse('2026-11-04T23:58:00') })
+  const pane = await mount($, clock)
+
+  await $.tool.call(bash)
+  expect(slotsOf(store, DAY).map(item => (item as Part).project)).toEqual(['p'])
+  expect(JSON.stringify(store)).not.toContain('work') // 경로(C:/work/p)는 저장하지 않는다
+  await clock.advance(3 * 60_000) // 자정을 넘긴다
+  await $.tool.call(bash)
+  expect(slotsOf(store, '2026-11-5').map(item => (item as Part).project)).toEqual(['p']) // 새 날의 칸에도 이름이 이어진다
+  await pane.unmount()
+})
+
+test('[프로젝트별] 오늘 두 프로젝트 이상에서 일했을 때 접이식 줄이 나오고(기본 접힘), 펴면 많이 한 순서로 숫자가 보이며, 위의 합계는 그대로다', async ($, on) => {
+  const store: Record<string, unknown> = { [slotKey('chat-b')]: projectSlot('other-app', 2, 5, ['f1']) }
+  const clock = world(on, { liveStore: store })
+  const pane = await mount($, clock)
+
+  await $.tool.call(bash) // 이 채팅(프로젝트 p): 도구 1번
+  const label = async () => (await pane.find({ key: 'fold:projects' }))?.props.label
+
+  expect(await label()).toBe('▸ 프로젝트별 오늘 2개') // 기본은 접힘
+  expect(await pane.find({ type: 'Text', text: 'other-app' })).toBeUndefined()
+  await pane.press({ key: 'fold:projects' })
+  expect(await label()).toBe('▾ 프로젝트별 오늘 2개')
+  const all = await texts(pane)
+
+  expect(all[all.indexOf('other-app') + 1]).toBe('프롬프트 2 · 도구 5 · 파일 1')
+  expect(all[all.lastIndexOf('p') + 1]).toBe('프롬프트 0 · 도구 1 · 파일 0') // 맨 위의 프로젝트 이름과 겹치지 않게 마지막 p
+  expect(all.indexOf('other-app')).toBeLessThan(all.lastIndexOf('p')) // 도구 실행이 더 많은 쪽이 위
+  expect(await counter(pane, '도구 실행')).toBe('6') // 합계 칸은 5 + 1 그대로
+  await pane.press({ key: 'fold:projects' })
+  expect(await pane.find({ type: 'Text', text: 'other-app' })).toBeUndefined() // 다시 접힌다
+  await pane.unmount()
+})
+
+test('[프로젝트별] 프로젝트가 하나뿐이면(다른 채팅도 같은 폴더 이름) 줄이 나오지 않고, 같은 프로젝트의 같은 파일은 한 번만 센다', async ($, on) => {
+  const store: Record<string, unknown> = { [slotKey('chat-b')]: projectSlot('p', 2, 5, ['f1']) }
+  const clock = world(on, { liveStore: store })
+  const pane = await mount($, clock)
+
+  await $.tool.call(bash)
+  expect(await pane.find({ key: 'fold:projects' })).toBeUndefined()
+  expect(await counter(pane, '도구 실행')).toBe('6') // 숫자 칸에는 그대로 합산된다
+})
+
+test('[프로젝트별] 이름을 남기기 전의 기록(옛 합계 키)은 "이전 기록"으로 따로 보인다', async ($, on) => {
+  const store: Record<string, unknown> = { today: { date: DAY, prompts: 7, actions: 9, files: [] } }
+  const clock = world(on, { liveStore: store })
+  const pane = await mount($, clock)
+
+  await $.tool.call(bash)
+  await pane.press({ key: 'fold:projects' })
+  const all = await texts(pane)
+
+  expect(all[all.indexOf('이전 기록') + 1]).toBe('프롬프트 7 · 도구 9 · 파일 0')
+  await pane.unmount()
+})
+
+test('[프로젝트별] 다른 채팅이 남긴 이름에 줄바꿈이 있어도 패널은 그려지고 이름에서는 빠진다', async ($, on) => {
+  const store: Record<string, unknown> = { [slotKey('chat-b')]: projectSlot('ev\nil', 2, 5) }
+  const clock = world(on, { liveStore: store })
+  const pane = await mount($, clock)
+
+  await $.tool.call(bash) // 이 채팅도 오늘 일을 해야 두 프로젝트가 된다
+  await pane.press({ key: 'fold:projects' })
+  expect(await pane.find({ type: 'Text', text: 'evil' })).toBeDefined() // 엔진은 제어 문자가 든 글자를 거부해 패널이 사라진다
+  await pane.unmount()
+})
+
+test('[프로젝트별] 다른 채팅들이 11개 프로젝트에서 일했어도, 잘려 나간 프로젝트를 이 채팅이 이어 하면 숫자를 합친다', async ($, on) => {
+  const store: Record<string, unknown> = { [slotKey('chat-p')]: projectSlot('p', 0, 1) } // 11번째(가장 적음)
+  for (let i = 0; i < 10; i += 1) store[slotKey(`chat-q${i}`)] = projectSlot(`q${i}`, 0, 5)
+  const clock = world(on, { liveStore: store })
+  const pane = await mount($, clock)
+
+  for (let i = 0; i < 5; i += 1) await $.tool.call(bash) // 이 채팅도 프로젝트 p: 1 + 5 = 6
+  await pane.press({ key: 'fold:projects' })
+  const all = await texts(pane)
+
+  expect(all[all.lastIndexOf('p') + 1]).toBe('프롬프트 0 · 도구 6 · 파일 0') // 합쳐서 6(이 채팅 몫 5만 보이면 틀린 것)
+  await pane.unmount()
 })
