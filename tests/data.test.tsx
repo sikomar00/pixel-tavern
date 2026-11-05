@@ -10,7 +10,7 @@ import { sumToday } from '../hooks/stats'
 import { filledSegments as segmentsFor, usageSummary, usageSvg } from '../hooks/usage'
 import { MODES, SCENES } from '../hooks/scenes'
 import { WARN_COLOR } from '../hooks/svg'
-import { ARMED_LABEL, BAND, GIT_LOG, GIT_STATUS, METAPHOR_NAMES, NOON, PANE, START, USAGE, counter, filledSegments, newSpy, slotsOf, world } from './kit'
+import { ARMED_LABEL, BAND, GIT_LOG, GIT_STATUS, METAPHOR_NAMES, NOON, PANE, START, USAGE, counter, filledSegments, newSpy, slotsOf, toPorcelainZ, world } from './kit'
 
 test('[데이터] 순수 도우미: 시간·모델·파일 주소·git 출력 읽기', async () => {
   const now = Date.parse('2026-11-04T10:00:00Z')
@@ -22,8 +22,8 @@ test('[데이터] 순수 도우미: 시간·모델·파일 주소·git 출력 �
   expect(fmtReset(undefined, now)).toBe('')
   expect(shortModel('claude-sonnet-5-5')).toBe('Sonnet 5.5')
   expect(baseName('C:\\a b\\c.ts')).toBe('c.ts')
-  expect(parseStatus(GIT_STATUS)).toEqual({ branch: 'main', ahead: 1, behind: 2, changed: 2 })
-  expect(parseStatus('## No commits yet on dev\n')).toEqual({ branch: 'dev', ahead: 0, behind: 0, changed: 0 })
+  expect(parseStatus(toPorcelainZ(GIT_STATUS))).toEqual({ branch: 'main', ahead: 1, behind: 2, changed: 2 })
+  expect(parseStatus(toPorcelainZ('## No commits yet on dev\n'))).toEqual({ branch: 'dev', ahead: 0, behind: 0, changed: 0 })
   expect(parseLog(GIT_LOG)).toEqual([
     { hash: 'abc1234', subject: 'feat: 배너 추가' },
     { hash: 'def5678', subject: 'fix: 한도 표시' },

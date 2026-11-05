@@ -48,7 +48,24 @@ export const counter = async (ui: { findAll: (q: object) => Promise<{ text?: str
 /** 엔진이 받쳐 주는 호출을 흉내 낸다. 시계와 저장소는 키트가 메모리로 답한다. */
 export type Spy = { ran: string[]; filled: string[]; toasts: string[]; runs: string[][] } // runs: process.run으로 실행한 명령(인자 목록)
 
-export type GitFake = { status: string; exitCode?: number }
+/** isZ: status 가 이미 진짜 -z 출력이다(변환하지 않는다). isTruncated: 출력이 한도에서 잘렸다. */
+export type GitFake = { status: string; exitCode?: number; isZ?: boolean; isTruncated?: boolean }
+
+/**
+ * 읽기 쉬운 줄 단위 시험 자료("XY 경로", 이름 변경은 "XY 옛 -> 새")를 git이 -z 로 내보내는 모양으로 바꾼다:
+ * 항목마다 NUL로 끝맺고, 이름 변경은 "XY 새 경로" 다음 칸에 옛 경로. 진짜 출력은 tests/git.test.tsx 의 고정 자료(tools/git_fixture.py)에 있다.
+ */
+export const toPorcelainZ = (text: string): string =>
+  text
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => {
+      const [from = '', to] = line.slice(3).split(' -> ')
+
+      return /[RC]/.test(line.slice(0, 2)) && to !== undefined ? `${line.slice(0, 3)}${to}\0${from}` : line
+    })
+    .map(entry => `${entry}\0`)
+    .join('')
 
 /**
  * 저장소를 여러 채팅이 나눠 쓸 때 생기는 겹침을 흉내 낸다. afterGet: 값을 읽어 간 "직후" 다른 채팅이 끼어든다.
@@ -141,9 +158,9 @@ export const world = (
     return {
       value: {
         exitCode: e.argv[0] === 'where.exe' ? whereExit : e.argv.includes('status') ? (git.exitCode ?? 0) : 0,
-        stdout: e.argv.includes('status') ? git.status : GIT_LOG,
+        stdout: e.argv.includes('status') ? (git.isZ ? git.status : toPorcelainZ(git.status)) : GIT_LOG,
         stderr: '',
-        isStdoutTruncated: false,
+        isStdoutTruncated: e.argv.includes('status') ? (git.isTruncated ?? false) : false,
         isStderrTruncated: false,
       },
     }

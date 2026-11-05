@@ -1,16 +1,16 @@
-// [Git] 시험: 바뀐 파일 목록(종류 분류, 접기, 개수 제한, 경고색, 이름 정리).
+// [Git] 시험: 바뀐 파일 목록(-z 읽기, 종류 분류, 접기, 개수 제한, 경고색, 이름 정리).
 import { expect, test } from 'claude-code/testing'
-import { parseFiles } from '../hooks/git'
+import { parseFiles, parseStatus } from '../hooks/git'
 import { SCENES } from '../hooks/scenes'
 import { WARN_COLOR } from '../hooks/svg'
-import { PANE, START, contrast, world } from './kit'
+import { PANE, START, contrast, toPorcelainZ, world } from './kit'
 
 const HEAD = '## main\n'
 
 test('[Git] 상태 코드는 새 파일·수정·삭제·이름 변경·충돌로 나뉘고, 충돌이 먼저 온다', () => {
   const out = `${HEAD} M a.ts\n?? b.ts\nA  c.ts\nAM d.ts\n D e.ts\nD  f.ts\nMD g.ts\nR  old.ts -> new/h.ts\nT  i.ts\nUU z.ts\nAA y.ts\n`
 
-  expect(parseFiles(out)).toEqual([
+  expect(parseFiles(toPorcelainZ(out))).toEqual([
     { path: 'z.ts', kind: 'conflict' },
     { path: 'y.ts', kind: 'conflict' },
     { path: 'a.ts', kind: 'modified' },
@@ -25,44 +25,70 @@ test('[Git] 상태 코드는 새 파일·수정·삭제·이름 변경·충돌�
   ])
 })
 
-test('[Git] 따옴표·제어 문자·빈 줄·짧은 줄을 정리하고, 변경이 없으면 빈 목록이다', () => {
-  expect(parseFiles(`${HEAD} M "a b.ts"\n?? x\u0007y.ts\n M \n??\n`)).toEqual([
-    { path: 'a b.ts', kind: 'modified' }, // 공백이 든 이름은 git이 따옴표로 감싼다
-    { path: 'xy.ts', kind: 'new' },
+test('[Git] -z 출력: 제어 문자는 표시에서 빼고, 빈 칸·짧은 칸·끝의 NUL은 무시하고, 변경이 없으면 빈 목록이다', () => {
+  expect(parseFiles('## main\0 M a\u0007b.ts\0\0 M \0??\0?? 한글/문서.md\0')).toEqual([
+    { path: 'ab.ts', kind: 'modified' },
+    { path: '한글/문서.md', kind: 'new' },
   ])
-  expect(parseFiles(HEAD)).toEqual([])
+  expect(parseFiles('## main\0')).toEqual([])
   expect(parseFiles('')).toEqual([])
-  expect(parseFiles(`${HEAD}?? 한글/문서.md\n`)).toEqual([{ path: '한글/문서.md', kind: 'new' }]) // quotePath=false 라서 한글이 그대로 온다
+  expect(parseStatus('## main\0')).toEqual({ branch: 'main', ahead: 0, behind: 0, changed: 0 })
 })
 
-// 임시 저장소에서 실제 git으로 만든 출력이다(`git --no-optional-locks -c core.fsmonitor=false -c core.quotePath=false status --porcelain=v1 -b`).
-// 한글 이름·공백(따옴표로 감싸임)·이름 변경("옛 -> 새")·합치기 충돌(UU)·index에 올린 새 파일(A)이 모두 들어 있다.
-const REAL_GIT = [
-  '## main',
-  'A  added.ts',
-  'UU conflict.txt',
-  ' D del.ts',
-  ' M dir/deep/x.ts',
-  'R  ren_old.ts -> "dir/공백 이름.ts"',
-  ' M mod.ts',
-  'R  "sp ace.ts" -> ren_new.ts',
-  '?? untracked.ts',
-  '?? "새 파일.txt"',
-  '',
-].join('\n')
+// 임시 저장소에서 실제 git으로 만든 출력이다: `git --no-optional-locks -c core.fsmonitor=false status --porcelain=v1 -z -b`. 만드는 법은 tools/git_fixture.py.
+// Windows는 이름에 ">", 따옴표, 탭, 줄바꿈을 쓸 수 없어서 인덱스에 직접 넣어 만들었다(역슬래시 이름은 Windows의 git이 "/"로 바꿔 만들 수 없다).
+// 이름 변경 두 건은 새 이름과 옛 이름 양쪽에 " -> "가 든다. -z 는 이름 변경을 "XY 새 경로" 다음 칸에 옛 경로로 준다. 줄 단위 출력에서는 이 이름들이 잘리거나 이스케이프가 그대로 보였다.
+// 이름 변경 + 작업 폴더 수정(RM)과, 양쪽이 같은 파일을 다른 이름으로 바꿔 생긴 충돌(UA·AU·DD)도 들어 있다.
+const REAL_Z = "## main\u0000UU conflict.txt\u0000 D del.txt\u0000A  emoji😀.txt\u0000D  gone\"q.txt\u0000A  line\nbreak.txt\u0000 M mod.txt\u0000R  plain-new.txt\u0000old -> name.txt\u0000A  q\"uote.txt\u0000R  renamed -> to new -> name.txt\u0000rn1.txt\u0000RM rm-dst.txt\u0000rm-src.txt\u0000UA rr-a.txt\u0000AU rr-b.txt\u0000DD rr.txt\u0000A  tab\tnew.txt\u0000A  ünï côde.txt\u0000?? newdir/\u0000?? untracked file.txt\u0000"
 
-test('[Git] 실제 git이 내보낸 출력(한글·공백·이름 변경·충돌)을 그대로 읽는다', () => {
-  expect(parseFiles(REAL_GIT)).toEqual([
-    { path: 'conflict.txt', kind: 'conflict' },
-    { path: 'added.ts', kind: 'new' },
-    { path: 'del.ts', kind: 'deleted' },
-    { path: 'dir/deep/x.ts', kind: 'modified' },
-    { path: 'dir/공백 이름.ts', kind: 'renamed' }, // 이름을 바꾼 줄은 새 이름, 따옴표는 벗김
-    { path: 'mod.ts', kind: 'modified' },
-    { path: 'ren_new.ts', kind: 'renamed' },
-    { path: 'untracked.ts', kind: 'new' },
-    { path: '새 파일.txt', kind: 'new' },
+test('[Git] 실제 git -z 출력: 어려운 이름(따옴표·탭·줄바꿈·" -> "·이모지·악센트·공백), 이름 변경(+수정), 이름 변경끼리의 충돌을 그대로 읽는다', () => {
+  expect(parseFiles(REAL_Z)).toEqual([
+    { path: 'conflict.txt', kind: 'conflict' }, // 충돌이 먼저(git이 준 순서대로)
+    { path: 'rr-a.txt', kind: 'conflict' }, // 이름 변경끼리의 충돌: UA, AU, DD 모두 경로가 하나뿐이다(옛 경로 칸이 없다)
+    { path: 'rr-b.txt', kind: 'conflict' },
+    { path: 'rr.txt', kind: 'conflict' },
+    { path: 'del.txt', kind: 'deleted' },
+    { path: 'emoji😀.txt', kind: 'new' },
+    { path: 'gone"q.txt', kind: 'deleted' }, // 따옴표
+    { path: 'linebreak.txt', kind: 'new' }, // 이름 속 줄바꿈 문자는 표시에서 뺀다
+    { path: 'mod.txt', kind: 'modified' },
+    { path: 'plain-new.txt', kind: 'renamed' }, // 옛 이름 "old -> name.txt"는 항목으로 세지 않는다
+    { path: 'q"uote.txt', kind: 'new' },
+    { path: 'renamed -> to new -> name.txt', kind: 'renamed' }, // 새 이름에 " -> "가 들어 있어도 잘리지 않는다
+    { path: 'rm-dst.txt', kind: 'renamed' }, // 이름을 바꾸고 작업 폴더에서 또 고친 것(RM)도 옛 경로 칸이 따라온다
+    { path: 'tabnew.txt', kind: 'new' }, // 이름 속 탭 문자는 표시에서 뺀다
+    { path: 'ünï côde.txt', kind: 'new' },
+    { path: 'newdir/', kind: 'new' },
+    { path: 'untracked file.txt', kind: 'new' },
   ])
+  expect(parseStatus(REAL_Z)).toEqual({ branch: 'main', ahead: 0, behind: 0, changed: 17 }) // 옛 이름 칸 3개(old -> name.txt, rn1.txt, rm-src.txt)는 개수에 들지 않는다
+})
+
+test('[Git] 패널: 실제 -z 출력의 이름 변경(새 이름에 " -> "가 든 것)이 잘리지 않고 보인다', async ($, on) => {
+  const clock = world(on, { git: { status: '## main\0R  renamed -> to new -> name.txt\0rn1.txt\0', isZ: true } })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  expect((await pane.find({ key: 'fold:changes' }))?.props.label).toBe('▸ 바뀐 파일 1개') // 옛 이름 칸(rn1.txt)은 1개로 세지 않는다
+  await pane.press({ key: 'fold:changes' })
+  expect(await pane.find({ type: 'Text', text: /^> renamed -> to new -> name\.txt$/ })).toBeDefined()
+  await pane.unmount()
+})
+
+test('[Git] 출력이 한도에서 잘렸으면 마지막의 조각난 항목은 버린다', async ($, on) => {
+  const clock = world(on, { git: { status: '## main\0 M a.ts\0 M b.t', isZ: true, isTruncated: true } }) // b.ts 의 끝이 잘렸다
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  expect((await pane.find({ key: 'fold:changes' }))?.props.label).toBe('▸ 바뀐 파일 1개')
+  await pane.press({ key: 'fold:changes' })
+  expect(await pane.find({ type: 'Text', text: /^~ a\.ts$/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /b\.t/ })).toBeUndefined()
+  await pane.unmount()
 })
 
 test('[Git] 패널: 바뀐 파일은 기본으로 접혀 있고, 누르면 종류별 개수와 파일 줄이 나온다', async ($, on) => {

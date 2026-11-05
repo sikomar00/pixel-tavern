@@ -6,7 +6,7 @@ import { ARMED_LABEL, BAND, COMMIT_LABEL, PANE, SIMPLIFY_LABEL, START, newSpy, w
 
 const STATUS = /^(○ 멈춤|◌ 연결 중…|● 재생 중|✕ 연결 실패|◇ 다른 채팅에서 재생 중)$/
 
-test('[안전] git: 읽기 명령은 잠금을 잡지 않고, 저장소 설정의 fsmonitor 를 실행하지 않고, 한글 이름을 숫자 코드로 바꾸지 않는다', async ($, on) => {
+test('[안전] git: 읽기 명령은 잠금을 잡지 않고, 저장소 설정의 fsmonitor 를 실행하지 않고, 파일 이름을 NUL로 나눠 있는 그대로 받는다', async ($, on) => {
   const spy = newSpy()
   const clock = world(on, { spy })
 
@@ -16,7 +16,8 @@ test('[안전] git: 읽기 명령은 잠금을 잡지 않고, 저장소 설정�
 
   expect(gitRuns.some(argv => argv.includes('status'))).toBe(true)
   expect(gitRuns.some(argv => argv.includes('log'))).toBe(true)
-  for (const argv of gitRuns) expect(argv.slice(0, 6)).toEqual(['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.quotePath=false'])
+  for (const argv of gitRuns) expect(argv.slice(0, 4)).toEqual(['git', '--no-optional-locks', '-c', 'core.fsmonitor=false'])
+  expect(gitRuns.find(argv => argv.includes('status'))).toContain('-z') // 따옴표·이스케이프 없이 NUL로 나눈 이름
 })
 
 test('[안전] 파일 목록: 이름에 줄바꿈 같은 제어 문자가 있어도 패널은 그려지고, 프롬프트 칸에는 한 줄만 들어간다', async ($, on) => {
