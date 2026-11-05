@@ -9,12 +9,14 @@ import {
   readFilesOpen,
   readGitInfo,
   readMood,
+  readOpenHelp,
   refreshGit,
   readRadio,
   writeArmed,
   writeFilesOpen,
   writeHidden,
   writeMood,
+  writeOpenHelp,
   writeRadio,
   writeVolume,
 } from './state'
@@ -31,7 +33,6 @@ export const QUICK: { key: QuickKey; label: string; command: string }[] = [
   { key: 'simplify', label: '코드 정리', command: 'simplify' },
 ]
 
-const HELP_TOAST_MS = 9000
 const ARM_MS = 5000 // 커밋 버튼을 한 번 누른 뒤 다시 누를 수 있는 시간
 
 export type Actions = {
@@ -43,7 +44,7 @@ export type Actions = {
   mentionFile: (path: string) => Promise<void>
   toggleRadio: () => Promise<void>
   setVolume: (level: number) => Promise<void>
-  explain: (text: string) => void
+  toggleHelp: (id: string) => Promise<void>
   toggleFiles: () => Promise<void>
 }
 
@@ -101,7 +102,7 @@ async function saveMood($: EngineInterface, next: Mood): Promise<void> {
   const radio = await readRadio($)
 
   if (isRunning(radio)) await startRadio($, currentSceneId(next))
-  else if (radio === 'failed') await writeRadio($, 'off') // 옛 방송의 실패 표시는 장면을 바꾸면 지운다
+  else if (radio === 'failed' || radio === 'other') await writeRadio($, 'off') // 옛 방송의 실패·가로채임 표시는 장면을 바꾸면 지운다
 }
 
 export function makeActions($: EngineInterface): Actions {
@@ -130,8 +131,8 @@ export function makeActions($: EngineInterface): Actions {
       if (next !== undefined) await setScene(next)
     },
     setHidden: hidden => writeHidden($, hidden),
-    // "?"를 눌렀을 때: 마우스를 올릴 수 없는 경우(키보드)를 위해 같은 설명을 알림으로 띄운다.
-    explain: text => $.ui.toast(text, { timeoutMs: HELP_TOAST_MS }),
+    // "?"를 누르면 그 설명이 패널 안에서 펼쳐지고, 다시 누르면 접힌다(하나만 열린다).
+    toggleHelp: async id => writeOpenHelp($, (await readOpenHelp($)) === id ? '' : id),
     toggleFiles: async () => writeFilesOpen($, !(await readFilesOpen($))),
     // 음량은 재생기를 켤 때 정해지므로, 켜져 있으면 새 음량으로 다시 켠다.
     setVolume: async level => {

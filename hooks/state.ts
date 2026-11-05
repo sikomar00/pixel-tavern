@@ -25,6 +25,8 @@ const radio = atom({ plugin: 'pixel-tavern', key: 'radio' } as const, 'off' as R
 const radioNote = atom({ plugin: 'pixel-tavern', key: 'radioNote' } as const, '')
 const volume = atom({ plugin: 'pixel-tavern', key: 'volume' } as const, DEFAULT_VOLUME)
 const isFilesOpen = atom({ plugin: 'pixel-tavern', key: 'isFilesOpen' } as const, false)
+const isMusicAvailable = atom({ plugin: 'pixel-tavern', key: 'isMusicAvailable' } as const, true)
+const openHelp = atom({ plugin: 'pixel-tavern', key: 'openHelp' } as const, '')
 
 export const currentSceneId = (m: Mood): SceneId => m.sceneByMode[m.mode]
 
@@ -108,7 +110,7 @@ export async function refresh($: EngineInterface): Promise<void> {
 
 /** 배너와 패널이 함께 쓰는 값. 그리는 중에 부르면 값이 바뀔 때 다시 그려진다. */
 export async function readView($: EngineInterface) {
-  const [m, u, g, mdl, proj, now, rad, note] = await Promise.all([
+  const [m, u, g, mdl, proj, now, rad, note, canPlay] = await Promise.all([
     read($, mood),
     read($, usage),
     read($, git),
@@ -117,22 +119,24 @@ export async function readView($: EngineInterface) {
     $.clock.now(),
     read($, radio),
     read($, radioNote),
+    read($, isMusicAvailable),
     read($, tick), // 1분마다 남은 시간 표시를 다시 그리게 한다
   ])
 
-  return { scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad, radioNote: note }
+  return { scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad, radioNote: note, isMusicAvailable: canPlay }
 }
 
 export async function readPanel($: EngineInterface) {
-  const [t, files, armed, level, isOpen] = await Promise.all([
+  const [t, files, armed, level, isOpen, help] = await Promise.all([
     read($, today),
     read($, chatFiles),
     read($, isCommitArmed),
     read($, volume),
     read($, isFilesOpen),
+    read($, openHelp),
   ])
 
-  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level, isFilesOpen: isOpen }
+  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level, isFilesOpen: isOpen, openHelp: help }
 }
 
 export function readHidden($: EngineInterface): Promise<boolean> {
@@ -179,6 +183,26 @@ export function readFilesOpen($: EngineInterface): Promise<boolean> {
 
 export async function writeFilesOpen($: EngineInterface, isOpen: boolean): Promise<void> {
   await update($, isFilesOpen, () => isOpen)
+}
+
+export async function writeMusicAvailable($: EngineInterface, isAvailable: boolean): Promise<void> {
+  await update($, isMusicAvailable, () => isAvailable)
+}
+
+export function readOpenHelp($: EngineInterface): Promise<string> {
+  return read($, openHelp)
+}
+
+/** 열린 도움말(없으면 빈 글자). 하나만 열린다. */
+export async function writeOpenHelp($: EngineInterface, id: string): Promise<void> {
+  await update($, openHelp, () => id)
+}
+
+/** 다른 채팅이 음악을 가져갔을 때: 실패가 아니라 "다른 채팅에서 재생 중"으로 바꾼다. */
+export async function yieldRadio($: EngineInterface, isStale: () => boolean): Promise<void> {
+  if (isStale()) return
+  await update($, radioNote, () => '')
+  await update($, radio, () => 'other')
 }
 
 /** 실패 상태로 바꾸고 이유를 남긴다. 이미 멈춘 재생이면 아무것도 바꾸지 않는다. */

@@ -2,11 +2,14 @@ import type { EngineInterface } from 'claude-code'
 
 import type { RadioState, SceneId } from '../types'
 import { SCENES } from './scenes'
-import { failRadio, readRadio, readVolume, writeRadio } from './state'
+import { failRadio, readRadio, readVolume, writeMusicAvailable, writeRadio, yieldRadio } from './state'
 import { gainOf } from './volume'
 
 const MARKER = 'pixel-tavern-radio'
 const SLOW_CONNECT_MS = 30_000 // 이만큼 지나도 "연결 중"이면 알려 준다
+// 이 채팅의 이름표. 음악을 켤 때 저장소에 적어 두면, 재생기가 꺼졌을 때 "다른 채팅이 가져갔나"를 알 수 있다.
+// 저장소가 채팅끼리 바로 공유되지 않으면 항상 내 이름표가 읽혀서 예전처럼 "연결 실패"로 보인다(나빠지지는 않는다).
+const CHAT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
 /**
  * Windows PowerShell의 MediaPlayer로 방송을 튼다(숨김 창, 주소는 환경변수로 받는다).
@@ -47,6 +50,19 @@ const statusOf = (text: string): RadioState | null => {
 const stoppedMessage = (error: string): string =>
   error === '' ? '재생기가 멈췄어요. 다른 채팅에서 음악을 켰을 수 있어요' : `재생기가 멈췄어요: ${error.slice(0, 80)}`
 
+async function isTakenOver($: EngineInterface): Promise<boolean> {
+  const owner = await $.store.get('radioOwner')
+
+  return typeof owner === 'string' && owner !== '' && owner !== CHAT_ID
+}
+
+/** 이 환경에서 음악을 쓸 수 있는지 한 번 본다: 윈도우에만 있는 `where.exe`로 PowerShell을 찾는다. 없으면 음악 버튼을 숨긴다. */
+export async function detectMusic($: EngineInterface): Promise<void> {
+  const found = await $.process.run(['where.exe', 'powershell.exe']).catch(() => null)
+
+  await writeMusicAvailable($, found !== null && found.exitCode === 0)
+}
+
 async function warnIfStillConnecting($: EngineInterface, playback: Playback): Promise<void> {
   if (playback.isStopped || (await readRadio($)) !== 'connecting') return
   $.ui.toast('방송에 아직 연결하지 못했어요. ■로 끄고 ⟳로 다른 장면의 방송을 써 보세요')
@@ -54,7 +70,7 @@ async function warnIfStillConnecting($: EngineInterface, playback: Playback): Pr
 
 async function listen($: EngineInterface, playback: Playback): Promise<void> {
   let lastError = ''
-  let isFailed = false
+  let isSettled = false // 실패·가로채임으로 상태를 이미 정했다
   const isStale = () => playback.isStopped
 
   try {
@@ -76,18 +92,23 @@ async function listen($: EngineInterface, playback: Playback): Promise<void> {
       if (status !== null) await writeRadio($, status, isStale)
     }
     if (!playback.isStopped) {
-      isFailed = true
-      await failRadio($, stoppedMessage(lastError), isStale)
-      $.ui.toast(`음악 연결 실패: ${stoppedMessage(lastError)}`)
+      isSettled = true
+      if (await isTakenOver($)) {
+        await yieldRadio($, isStale)
+        $.ui.toast('다른 채팅에서 음악을 켜서 이 채팅의 음악은 멈췄어요')
+      } else {
+        await failRadio($, stoppedMessage(lastError), isStale)
+        $.ui.toast(`음악 연결 실패: ${stoppedMessage(lastError)}`)
+      }
     }
   } catch (error) {
-    isFailed = true
+    isSettled = true
     await failRadio($, '재생기를 켜지 못했어요(Windows에서만 켤 수 있어요)', isStale)
     $.ui.toast(`음악을 켜지 못했어요: ${String(error)}`)
   } finally {
     if (current === playback) {
       current = null
-      if (!isFailed) await writeRadio($, 'off')
+      if (!isSettled) await writeRadio($, 'off')
     }
   }
 }
@@ -99,6 +120,7 @@ export async function startRadio($: EngineInterface, sceneId: SceneId): Promise<
   const playback: Playback = { isStopped: false, sceneId, gain }
 
   current = playback
+  await $.store.set('radioOwner', CHAT_ID)
   await writeRadio($, 'connecting')
   void listen($, playback)
 }

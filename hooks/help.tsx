@@ -11,7 +11,7 @@ const HELP_CELLS = 26
 
 /**
  * 도움말은 이해하기 어려운 곳에만 둔다(파일 목록처럼 한 줄이면 되는 안내는 화면에 직접 적는다).
- * 화면에는 "?"만 두고, 설명은 마우스를 올릴 때(또는 눌렀을 때) 보인다.
+ * 화면에는 "?"만 두고, 눌러서 패널 안에서 펼쳐 본다(하나만 열린다). 마우스를 올리면 같은 설명이 떠서 빠르게도 볼 수 있다.
  */
 export const HELP = {
   scene: ['장면은 배너와 패널의 분위기, 음악 방송을 함께 바꿔요.', '배너 오른쪽 위: ▶ 음악 · ▤ 이 패널 · ⟳ 다음 장면 · ✕ 숨기기'],
@@ -33,44 +33,68 @@ export const HELP = {
   ],
 } as const
 
-type HelpMark = { scene: Scene; act: Actions; id: keyof typeof HELP }
+export type HelpId = keyof typeof HELP
+
+type HelpMark = { scene: Scene; act: Actions; id: HelpId; isOpen: boolean }
 
 /**
- * "?" 표시. 마우스를 올리면 같은 hover 묶음의 설명 창이 열린다(창은 평소 숨겨진 절대 위치 상자).
- * 눌러도 같은 설명이 잠깐 떠서, 마우스 없이 키보드로도 볼 수 있다. 설명 창은 "?"의 오른쪽 끝에 맞춰 왼쪽으로 펼쳐진다.
+ * "?" 표시(열려 있으면 "×"). 누르면 설명이 패널 안에서 펼쳐진다: 호버 없이도(키보드·터치) 늘 같은 방식으로 볼 수 있다.
+ * 닫혀 있을 때만 마우스 호버 설명 창(평소 숨겨진 절대 위치 상자)이 같은 hover 묶음으로 달려 있다. 앱에서 열리는지는 확인하지 못했다.
  */
-export const helpMark = (ui: Ui, { scene, act, id }: HelpMark) => {
+export const helpMark = (ui: Ui, { scene, act, id, isOpen }: HelpMark) => {
   const { Box, Button, Text } = ui
   const scope = `help-${id}`
-  const lines = HELP[id]
+  const tip = (
+    <Box
+      position="absolute"
+      top={1}
+      right={0}
+      width={HELP_CELLS}
+      display="none"
+      hover={{ scope, display: 'flex' }}
+      flexDirection="column"
+      gap={SPACE.line}
+      backgroundColor={chipOf(scene)}
+      paddingX={SPACE.control}
+      paddingY={SPACE.control}
+    >
+      {HELP[id].map(line => (
+        <Text size="footnote">{line}</Text>
+      ))}
+    </Box>
+  )
 
   return (
     <Box position="relative">
       <Button
         key={`help:${id}`}
         plain
-        dimColor
-        label="?"
+        dimColor={!isOpen}
+        label={isOpen ? '×' : '?'}
         hover={{ scope, color: scene.accent }}
-        onPress={() => act.explain(lines.join(' · '))}
+        onPress={() => act.toggleHelp(id)}
       />
-      <Box
-        position="absolute"
-        top={1}
-        right={0}
-        width={HELP_CELLS}
-        display="none"
-        hover={{ scope, display: 'flex' }}
-        flexDirection="column"
-        gap={SPACE.line}
-        backgroundColor={chipOf(scene)}
-        paddingX={SPACE.control}
-        paddingY={SPACE.control}
-      >
-        {lines.map(line => (
-          <Text size="footnote">{line}</Text>
-        ))}
-      </Box>
+      {isOpen ? [] : [tip]}
+    </Box>
+  )
+}
+
+/** 펼쳐진 설명. 머리글 바로 아래에 놓는다. */
+export const helpCard = (ui: Ui, { scene, id }: { scene: Scene; id: HelpId }) => {
+  const { Box, Text } = ui
+
+  return (
+    <Box
+      key={`help-card:${id}`}
+      flexDirection="column"
+      gap={SPACE.line}
+      backgroundColor={chipOf(scene)}
+      paddingX={SPACE.control}
+      paddingY={SPACE.control}
+    >
+      {HELP[id].map(line => (
+        <Text size="footnote">{line}</Text>
+      ))}
     </Box>
   )
 }

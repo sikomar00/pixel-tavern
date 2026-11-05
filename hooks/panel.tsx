@@ -6,7 +6,8 @@ import type { Actions } from './actions'
 import { ART, composeScene } from './art'
 import type { BannerData } from './banner'
 import { shortPath, todayKey } from './format'
-import { helpMark } from './help'
+import { helpCard, helpMark } from './help'
+import type { HelpId } from './help'
 import { MODES, SCENES } from './scenes'
 import { WARN_COLOR, clip } from './svg'
 import { SPACE, chipOf, surfaceOf } from './theme'
@@ -16,6 +17,7 @@ import { MAX_VOLUME } from './volume'
 
 export type PanelData = BannerData & {
   radioNote: string
+  openHelp: string
   today: Today
   chatFiles: string[]
   isFilesOpen: boolean
@@ -61,6 +63,13 @@ const inset = (ui: Ui, children: unknown[], gap: Gap = SPACE.line) => {
     </Box>
   )
 }
+
+/** 항목의 "?" 표시. 이 항목의 설명이 펼쳐져 있으면 "×"가 된다. */
+const mark = (ui: Ui, d: PanelData, act: Actions, id: HelpId) =>
+  helpMark(ui, { scene: d.scene, act, id, isOpen: d.openHelp === id })
+
+/** 펼쳐진 설명(열려 있을 때만). 머리글 아래 안쪽 여백 목록에 이어 붙인다. */
+const cardOf = (ui: Ui, d: PanelData, id: HelpId): unknown[] => (d.openHelp === id ? [helpCard(ui, { scene: d.scene, id })] : [])
 
 /** 제목 줄: 왼쪽은 제목, 오른쪽은 개수·"?" 같은 덧붙임. */
 const titleRow = (ui: Ui, title: unknown, trailing: unknown[]) => {
@@ -119,8 +128,9 @@ const settings = (ui: Ui, d: PanelData, act: Actions) => {
             onSelect={value => act.setScene(value as SceneId)}
           />
         </Box>
-        {helpMark(ui, { scene: d.scene, act, id: 'scene' })}
+        {mark(ui, d, act, 'scene')}
       </Box>,
+      ...cardOf(ui, d, 'scene'),
     ]),
   ])
 }
@@ -147,7 +157,7 @@ const quick = (ui: Ui, d: PanelData, act: Actions) => {
   ]
 
   return band(ui, d.scene.base, [
-    inset(ui, [header(ui, d, '빠른 실행', [helpMark(ui, { scene: d.scene, act, id: 'quick' })])]),
+    inset(ui, [header(ui, d, '빠른 실행', [mark(ui, d, act, 'quick')]), ...cardOf(ui, d, 'quick')]),
     inset(
       ui,
       [
@@ -183,7 +193,7 @@ const usage = (ui: Ui, d: PanelData, act: Actions) => {
   const { Svg } = ui
 
   return band(ui, surfaceOf(d.scene), [
-    inset(ui, [header(ui, d, '사용량', [helpMark(ui, { scene: d.scene, act, id: 'usage' })])]),
+    inset(ui, [header(ui, d, '사용량', [mark(ui, d, act, 'usage')]), ...cardOf(ui, d, 'usage')]),
     <Svg
       source={usageSvg(d.scene, d.usage, d.now)}
       alt="컨텍스트, 5시간 한도, 주간 한도 사용량. 원은 쓴 양이에요"
@@ -270,7 +280,7 @@ const status = (ui: Ui, d: PanelData, act: Actions) => {
   const t = d.today.date === todayKey(d.now) ? d.today : { ...d.today, prompts: 0, actions: 0, files: [] }
 
   return band(ui, d.scene.base, [
-    inset(ui, [header(ui, d, '작업 현황', [helpMark(ui, { scene: d.scene, act, id: 'status' })])]),
+    inset(ui, [header(ui, d, '작업 현황', [mark(ui, d, act, 'status')]), ...cardOf(ui, d, 'status')]),
     inset(ui, [
       <Text size="heading" weight="semibold" wrap="truncate-end">
         {d.project === '' ? '-' : d.project}
@@ -333,6 +343,7 @@ const RADIO_STATUS: Record<RadioState, string> = {
   connecting: '◌ 연결 중…',
   playing: '● 재생 중',
   failed: '✕ 연결 실패',
+  other: '◇ 다른 채팅에서 재생 중',
 }
 
 /** 음량 −/+ 와 현재 단계(●가 채운 칸). 켜져 있으면 새 음량으로 방송을 다시 연결한다. */
@@ -360,10 +371,22 @@ const music = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
   const isRunning = d.radio === 'connecting' || d.radio === 'playing'
   const isFailed = d.radio === 'failed'
-  const label = isRunning ? '■ 정지' : isFailed ? '▶ 다시 시도' : '▶ 재생'
+  const label = isRunning ? '■ 정지' : isFailed ? '▶ 다시 시도' : d.radio === 'other' ? '▶ 여기서 켜기' : '▶ 재생'
+
+  // 윈도우가 아니면 음악은 쓸 수 없다: 버튼을 두지 않고 이유만 알린다.
+  if (!d.isMusicAvailable) {
+    return band(ui, d.scene.base, [
+      inset(ui, [
+        header(ui, d, '음악'),
+        <Text color={d.scene.muted} size="footnote">
+          음악은 Windows에서만 쓸 수 있어요
+        </Text>,
+      ]),
+    ])
+  }
 
   return band(ui, d.scene.base, [
-    inset(ui, [header(ui, d, '음악', [helpMark(ui, { scene: d.scene, act, id: 'music' })])]),
+    inset(ui, [header(ui, d, '음악', [mark(ui, d, act, 'music')]), ...cardOf(ui, d, 'music')]),
     inset(ui, [
       <Text size="heading" weight="semibold" wrap="truncate-end">
         {d.scene.music.label}
