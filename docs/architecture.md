@@ -15,7 +15,7 @@ Claude Code 데스크톱의 "모드"(hooks 모듈)로, 프롬프트 위의 픽�
 | | `art/` | — | 생성된 SVG(코드가 아니라 데이터). `tools/gen_art.py`가 만듦 |
 | 상태 | `state.ts` | 255 | 상태 값(atom) 선언, 저장소 읽기·쓰기(장면·음량·접힘 등), 이 채팅의 파일 기록 |
 | | `stats.ts` | 132 | 오늘 통계: 채팅별 칸에 쓰고 합계는 칸들의 합(여러 채팅이 동시에 늘려도 사라지지 않음) |
-| 바깥 세계 | `git.ts` | 74 | `git status/log` 읽기(안전 옵션 포함), 상태 줄을 바뀐 파일 목록(종류별)으로 해석 |
+| 바깥 세계 | `git.ts` | 90 | `git status -z/log` 읽기(안전 옵션 포함). status를 NUL로 나눠 이름을 따옴표·이스케이프 없이 있는 그대로 받아 바뀐 파일 목록(종류별)으로 해석 |
 | | `radio.ts` | 153 | PowerShell 재생기 스크립트, 재생 상태, 다른 채팅 감지, 연결 포기 |
 | 동작 | `actions.ts` | 203 | 버튼이 하는 일(장면·음악·커밋·정리 두 단계·접기·도움말) |
 | | `alerts.ts` | 43 | 사용량 90% 알림 규칙 |
@@ -78,3 +78,4 @@ register ─┬─ actions ── radio ── state ── git
 | `tools/render_panel.py`, `tree_dump.scenario.tsx` | 미리보기 HTML, 그려진 트리 덤프 |
 | `tools/measured.json` | 실제 앱에서 잰 값(패널 약 388px, 51열×63줄, 글자 칸 7.72px 등) |
 | `tools/player_check.py` | 실제 Windows 재생기 점검 3종 |
+| `tools/git_fixture.py` | 실제 git으로 어려운 파일 이름이 든 임시 저장소를 만들어 `status -z` 출력을 찍음(`tests/git.test.tsx`의 `REAL_Z`와 같아야 함) |
