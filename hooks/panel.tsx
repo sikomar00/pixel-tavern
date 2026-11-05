@@ -1,7 +1,6 @@
 import type { Elements } from 'claude-code'
 
-import type { QuickKey, SceneId, Today } from '../types'
-import { QUICK } from './actions'
+import type { QuickKey, SceneId, Today, Work } from '../types'
 import type { Actions } from './actions'
 import { ART, composeScene } from './art'
 import type { BannerData } from './banner'
@@ -11,6 +10,7 @@ import { shortPath, todayKey } from './format'
 import { gitRows } from './gitrows'
 import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import { music } from './music'
+import { quick } from './quick'
 import { MODES, SCENES } from './scenes'
 import { SPACE, surfaceOf } from './theme'
 import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
@@ -24,6 +24,7 @@ export type PanelData = BannerData & {
   chatFiles: string[]
   isFilesOpen: boolean
   armedKey: QuickKey | null
+  work: Work
   volume: number
   collapsed: string[]
 }
@@ -73,46 +74,6 @@ const settings = (ui: Ui, d: PanelData, act: Actions) => {
       </Box>,
       ...cardOf(ui, d, 'scene'),
     ]),
-  ])
-}
-
-/** 영역 2: 빠른 실행. 버튼만 한 줄에 둔다. 확인이 필요한 버튼(커밋·정리)은 한 번 누르면 5초 동안 "한 번 더"로 바뀌고 안내가 붙는다. */
-const quick = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Button, Text } = ui
-  const buttons = QUICK.map(({ key, label }) => {
-    const isArmed = key === d.armedKey
-
-    return (
-      <Button
-        key={key}
-        variant={isArmed ? 'primary' : undefined}
-        label={isArmed ? '한 번 더' : label} // 라벨 길이가 같아야 줄이 흔들리지 않는다
-        onPress={() => act.quick(key)}
-      />
-    )
-  })
-  const notice = QUICK.find(item => item.key === d.armedKey)?.confirm?.notice
-  const armed =
-    notice === undefined
-      ? []
-      : [
-          <Text color={d.scene.accent} weight="semibold" size="footnote">
-            {notice}
-          </Text>,
-        ]
-
-  return band(ui, d.scene.base, [
-    inset(ui, [header(ui, d, { title: '빠른 실행', trailing: [mark(ui, d, act, 'quick')] }), ...cardOf(ui, d, 'quick')]),
-    inset(
-      ui,
-      [
-        <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
-          {buttons}
-        </Box>,
-        ...armed,
-      ],
-      SPACE.control,
-    ),
   ])
 }
 

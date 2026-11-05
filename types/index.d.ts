@@ -12,6 +12,19 @@ export type RadioState = 'off' | 'connecting' | 'playing' | 'failed' | 'other'
 
 export type QuickKey = 'review' | 'commit' | 'simplify'
 
+/** 턴이 끝난 이유(엔진의 turn.complete와 같다): 답을 마쳤다 · 사용자가 멈췄다 · 오류 · 모델이 거절했다. */
+export type TurnEnd = 'answer' | 'aborted' | 'error' | 'refusal'
+
+/**
+ * 빠른 실행 버튼의 진행 상태. waiting: 눌렀고 명령이 줄 서 있거나 모델 작업이 아직 안 시작됨 · running: 그 작업이 도는 중(turnId로 따라감)
+ * · ended: 끝남(잠깐 보이고 사라진다). 모델의 답이나 프롬프트 글은 담지 않는다.
+ */
+export type Work =
+  | { phase: 'idle' }
+  | { phase: 'waiting'; key: QuickKey }
+  | { phase: 'running'; key: QuickKey; turnId: string }
+  | { phase: 'ended'; key: QuickKey; reason: TurnEnd; seconds: number }
+
 /** 오늘 통계. date가 오늘과 다르면 0부터 다시 센다. */
 export type Today = { date: string; prompts: number; actions: number; files: string[] }
 
@@ -52,6 +65,7 @@ declare module 'claude-code' {
       project: string
       chatFiles: string[]
       armedKey: QuickKey | null
+      work: Work
       tick: number
       radio: RadioState
       radioNote: string

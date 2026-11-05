@@ -24,6 +24,7 @@ import {
   writeVolume,
 } from './state'
 import { isVolume } from './volume'
+import { clearWork, settleWaiting, startWaiting } from './work'
 
 export const PANE_ID = 'tavern'
 export const PANE_TITLE = '여관'
@@ -134,10 +135,15 @@ export function makeActions($: EngineInterface): Actions {
     await saveMood($, { mode, sceneByMode: { ...m.sceneByMode, [mode]: id } })
   }
 
-  const run = async (command: string): Promise<void> => {
+  // 누른 순간부터 진행 상태를 보인다. 명령은 세션이 한가할 때 실행되고, 모델 작업이 시작·끝나는 것은 register의 turn 훅이 알려 준다.
+  const run = async (command: string, key: QuickKey): Promise<void> => {
+    const seq = await startWaiting($, key)
+
     try {
       await $.command.run({ command })
+      await settleWaiting($, seq)
     } catch (error) {
+      await clearWork($, seq)
       $.ui.toast(`/${command} 를 실행하지 못했어요: ${String(error)}`)
     }
   }
@@ -181,7 +187,7 @@ export function makeActions($: EngineInterface): Actions {
       const item = QUICK.find(entry => entry.key === key)
 
       if (item === undefined) return
-      if (item.confirm === undefined) return run(item.command)
+      if (item.confirm === undefined) return run(item.command, key)
       if (isPressBusy) return
       isPressBusy = true
       let shouldRun = false
@@ -191,7 +197,7 @@ export function makeActions($: EngineInterface): Actions {
       } finally {
         isPressBusy = false
       }
-      if (shouldRun) await run(item.command)
+      if (shouldRun) await run(item.command, key)
     },
   }
 }

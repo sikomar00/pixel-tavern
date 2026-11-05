@@ -23,6 +23,7 @@ import {
   writeRadio,
   writeUsage,
 } from './state'
+import { beginTurn, endTurn, readWork } from './work'
 
 const REFRESH_MS = 60_000
 
@@ -80,6 +81,22 @@ export const register: Register = on => {
     void refreshGit($).catch(error => logFailure($, error)) // 한 턴이 끝났으니 파일이 바뀌었을 수 있다
 
     return next(e)
+  })
+
+  // 빠른 실행 버튼의 진행 상태: 버튼을 누른 뒤 처음 시작하는 메인 대화의 턴을 따라간다(서브에이전트의 턴은 건너뛴다).
+  // 모델의 답(answer)이나 프롬프트 글(text)은 읽지 않는다.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) await beginTurn($, e.turnId)
+
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+
+    if (e.agentId === undefined) await endTurn($, e)
+
+    return done
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -161,7 +178,7 @@ export const register: Register = on => {
       )
     }
     const frame = { columns: e.props.bodyColumns, rows: e.props.scroll.bodyRows, placement: e.props.placement, surface: e.surface }
-    const view = { ...(await readView($)), ...(await readPanel($)), frame }
+    const view = { ...(await readView($)), ...(await readPanel($)), work: await readWork($), frame }
 
     return panelView(ui as Elements['desktop'], view, makeActions($))
   })
