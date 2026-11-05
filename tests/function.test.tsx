@@ -176,6 +176,32 @@ const shownStations = async (pane: Pane): Promise<string[]> => (await pane.findA
 
 const hasText = async (pane: Pane, text: string | RegExp): Promise<boolean> => (await pane.find({ type: 'Text', text })) !== undefined
 
+const buttonKeys = async (pane: Pane): Promise<string[]> => (await pane.findAll({ type: 'Button' })).map(button => String(button.key))
+
+test('[기능] 음악: 평소에는 방송 버튼 없이 한 덩어리(이름·상태 / 재생·음량 / 방송 바꾸기·즐겨찾기)이고, "방송 바꾸기"를 눌러야 묶음·방송 버튼이 펼쳐진다', async ($, on) => {
+  const clock = world(on)
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const label = async () => (await pane.find({ key: 'picker' }))?.props.label
+
+  expect(await buttonKeys(pane)).toEqual(expect.arrayContaining(['radio', 'volume-down', 'volume-up', 'picker', 'favorite'])) // 접힌 음악의 버튼 다섯
+  expect((await buttonKeys(pane)).filter(key => key.startsWith('group:') || key.startsWith('station:'))).toEqual([])
+  expect(await label()).toBe('▸ 방송 바꾸기')
+  await pane.press({ key: 'favorite' }) // 접혀 있어도 지금 방송의 즐겨찾기는 켜고 끈다
+  expect((await pane.find({ key: 'favorite' }))?.props.label).toBe('★ 즐겨찾기')
+  await pane.press({ key: 'picker' })
+  expect(await label()).toBe('▾ 방송 바꾸기')
+  expect((await buttonKeys(pane)).filter(key => key.startsWith('group:'))).toEqual(['group:fav', ...STATION_GROUPS.map(group => `group:${group.id}`)])
+  expect(await shownStations(pane)).toEqual(keysOf('calm'))
+  await pane.press({ key: 'picker' })
+  expect(await shownStations(pane)).toEqual([]) // 다시 누르면 접힌다
+  await Promise.all([pane.press({ key: 'picker' }), pane.press({ key: 'picker' })]) // 거의 동시에 두 번: 폈다가 접는다
+  expect(await label()).toBe('▸ 방송 바꾸기')
+  await pane.unmount()
+})
+
 test('[기능] 방송 고르기: 묶음 버튼으로 방송을 골라 장면마다 따로 기억하고, 켜져 있으면 새 방송으로 다시 켜고, 꺼져 있으면 켜지 않는다', async ($, on) => {
   const store: Record<string, unknown> = {}
   const seen: Env[] = []
@@ -190,6 +216,8 @@ test('[기능] 방송 고르기: 묶음 버튼으로 방송을 골라 장면마�
   const note = async () => String((await banner.find({ type: 'Svg' }))?.props.source)
 
   expect(await hasText(pane, 'REYFM 로파이')).toBe(true) // 다락방의 기본 방송
+  expect(await shownStations(pane)).toEqual([]) // 방송 고르기는 접혀 있다
+  await pane.press({ key: 'picker' })
   expect(await shownStations(pane)).toEqual(keysOf('calm')) // 지금 방송의 묶음이 먼저 보인다
   expect((await pane.find({ key: 'station:reyfm' }))?.props.variant).toBe('primary') // 지금 방송은 진한 버튼
   await pane.press({ key: 'group:game' })
@@ -231,6 +259,7 @@ test('[기능] 방송 고르기: 저장된 선택은 다음 세션에도 이어�
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
   expect(await hasText(pane, 'Kaaos 칩튠 라디오')).toBe(true) // 다락방에서 고른 방송이 이어진다
+  await pane.press({ key: 'picker' })
   expect(await shownStations(pane)).toEqual(keysOf('game')) // 지금 방송의 묶음
   expect((await pane.find({ key: 'station:kaaos' }))?.props.variant).toBe('primary')
   expect((await pane.find({ key: 'favorite' }))?.props.label).toBe('★ 즐겨찾기')
@@ -270,6 +299,7 @@ test('[기능] 즐겨찾기: ☆로 켜고 끄며, ★ 묶음에 모이고 방�
   const buttonLabel = async (id: string) => (await pane.find({ key: `station:${id}` }))?.props.label
 
   expect(await label()).toBe('☆ 즐겨찾기')
+  await pane.press({ key: 'picker' })
   expect(await buttonLabel('reyfm')).toBe('REYFM')
   await pane.press({ key: 'favorite' })
   expect(await label()).toBe('★ 즐겨찾기')
@@ -309,6 +339,7 @@ test('[기능] 방송 고르기: 연결 실패 표시가 남아 있을 때 다�
 
   await banner.press({ key: 'music' })
   expect(await hasText(pane, /✕ 연결 실패/)).toBe(true)
+  await pane.press({ key: 'picker' })
   await pane.press({ key: 'station:groovesalad' })
   expect(await hasText(pane, /✕ 연결 실패/)).toBe(false) // 새로 고른 방송에 옛 실패가 붙어 있지 않다
   expect(await hasText(pane, /○ 멈춤/)).toBe(true)

@@ -182,7 +182,7 @@ test('[레이아웃] 사용량 그림 폭은 패널 열 수에 맞추되 기본(
   expect(wide).toContain('x="193.5"')
 })
 
-test('[레이아웃] 패널 열이 51이면 사용량 그림을 387px로 그리고, 숫자 칸의 숫자는 title 크기다', async ($, on) => {
+test('[레이아웃] 패널 열이 51이면 사용량 그림을 카드 막대를 뺀 380px로 그리고, 숫자 칸의 숫자는 title 크기다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
@@ -190,8 +190,8 @@ test('[레이아웃] 패널 열이 51이면 사용량 그림을 387px로 그리�
   const pane = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 51 }, surface: 'desktop' })
   const svgs = await pane.findAll({ type: 'Svg' })
 
-  expect(svgs[1]?.props.width).toBe(387)
-  expect(String(svgs[1]?.props.source)).toContain(`viewBox="0 0 387 ${USAGE_HEIGHT}"`)
+  expect(svgs[1]?.props.width).toBe(380) // 패널 51열 − 카드 막대 1열 = 50열
+  expect(String(svgs[1]?.props.source)).toContain(`viewBox="0 0 380 ${USAGE_HEIGHT}"`)
   expect(svgs[0]?.props.width).toBe(340) // 그림(픽셀 아트)은 4배 그대로: 선명도를 지킨다
   const texts = await pane.findAll({ type: 'Text' })
   const index = texts.findIndex(node => node.text === '프롬프트')
@@ -200,24 +200,35 @@ test('[레이아웃] 패널 열이 51이면 사용량 그림을 387px로 그리�
   await pane.unmount()
 })
 
-test('[레이아웃] 음악은 그림 바로 아래 카드로 놓이고, 사용량·만진 파일과 같은 카드 배경이다', async ($, on) => {
+test('[레이아웃] 구역 여섯은 모두 같은 카드(밝은 배경 + 왼쪽 강조 막대)이고, 카드 사이는 바탕이 비쳐 보이는 간격이다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const all = await pane.findAll({ type: 'Box' })
-  const bands = all.filter(node => node.props.paddingY === 'md') // 구역(띠)들: 설정, 음악, 빠른 실행, 할 일, 사용량, 작업 현황, 만진 파일
-  const card = surfaceOf(SCENES.attic)
-  const tones = bands.map(node => node.props.backgroundColor)
+  const scene = SCENES.attic
+  const cards = all.filter(node => node.props.flexDirection === 'row' && node.props.alignItems === 'stretch' && node.props.backgroundColor === surfaceOf(scene))
+  const stripes = all.filter(node => node.props.width === 1 && node.props.backgroundColor === scene.accent)
+  const counters = all.filter(node => node.props.flexGrow === 1 && node.props.backgroundColor === chipOf(scene))
 
-  expect(tones[1]).toBe(card) // 설정 다음, 빠른 실행 앞이 음악
-  expect(tones[4]).toBe(card) // 사용량
-  expect(tones[6]).toBe(card) // 만진 파일
-  expect(tones[2]).not.toBe(card) // 빠른 실행은 바탕
-  expect(tones[3]).not.toBe(card) // 할 일도 바탕
-  const texts = (await pane.findAll({ type: 'Text' })).map(node => node.text)
+  expect(cards).toHaveLength(6) // 음악, 빠른 실행, 할 일, 사용량, 작업 현황, 만진 파일: 하나도 바탕 위에 그냥 놓이지 않는다
+  expect(stripes).toHaveLength(6) // 카드마다 강조 막대 하나
+  expect(counters).toHaveLength(3) // 숫자 칸은 카드 위에서 보이도록 카드보다 한 단계 더 밝다
+  expect(all[0]?.props.backgroundColor).toBe(scene.base) // 맨 바깥은 바탕
+  expect(all[0]?.props.gap).toBe('md') // 카드 사이로 바탕이 비쳐 보인다
+  await pane.unmount()
+})
 
-  expect(texts.indexOf('음악')).toBeLessThan(texts.indexOf('빠른 실행'))
+test('[레이아웃] 음악 첫 줄: 방송 이름이 길면 이름이 잘리고, 상태 글자(다른 채팅에서 재생 중 등)는 줄어들지 않는다', async ($, on) => {
+  const clock = world(on)
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const all = await pane.findAll({ type: 'Box' })
+
+  expect((await pane.find({ type: 'Text', text: SCENES.attic.music.label }))?.props.wrap).toBe('truncate-end')
+  expect(all.filter(node => node.props.flexShrink === 0)).toHaveLength(1) // 상태 글자 칸 하나
   await pane.unmount()
 })
