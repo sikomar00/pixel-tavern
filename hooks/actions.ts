@@ -1,6 +1,6 @@
 import type { EngineInterface, Timer } from 'claude-code'
 
-import type { Mood, RadioState, SceneId } from '../types'
+import type { Mood, QuickKey, RadioState, SceneId } from '../types'
 import { startRadio, stopRadio } from './radio'
 import { MODES, SCENES } from './scenes'
 import {
@@ -28,15 +28,31 @@ import { isVolume } from './volume'
 export const PANE_ID = 'tavern'
 export const PANE_TITLE = '여관'
 
-export type QuickKey = 'review' | 'commit' | 'simplify'
+type QuickItem = {
+  key: QuickKey
+  label: string
+  command: string
+  /** 있으면 두 번 눌러야 실행된다(파일을 바꾸는 명령). notice: 대기 중 안내, empty: 바뀐 파일이 없을 때의 알림. */
+  confirm?: { notice: string; empty: string }
+}
 
-export const QUICK: { key: QuickKey; label: string; command: string }[] = [
+export const QUICK: QuickItem[] = [
   { key: 'review', label: '코드 리뷰', command: 'code-review' },
-  { key: 'commit', label: '변경 커밋', command: 'commit-commands:commit' },
-  { key: 'simplify', label: '코드 정리', command: 'simplify' },
+  {
+    key: 'commit',
+    label: '변경 커밋',
+    command: 'commit-commands:commit',
+    confirm: { notice: '5초 안에 한 번 더 누르면 변경을 커밋해요', empty: '커밋할 변경이 없어요' },
+  },
+  {
+    key: 'simplify',
+    label: '코드 정리',
+    command: 'simplify',
+    confirm: { notice: '5초 안에 한 번 더 누르면 코드를 고쳐요', empty: '정리할 변경이 없어요' },
+  },
 ]
 
-const ARM_MS = 5000 // 커밋 버튼을 한 번 누른 뒤 다시 누를 수 있는 시간
+const ARM_MS = 5000 // 확인이 필요한 버튼(커밋·정리)을 한 번 누른 뒤 다시 누를 수 있는 시간
 
 export type Actions = {
   openPanel: () => Promise<void>
@@ -60,7 +76,7 @@ async function openPane($: EngineInterface, base: string): Promise<void> {
 /** 방송이 켜지는 중이거나 나오는 중인가(꺼짐·실패는 아니다). */
 const isRunning = (state: RadioState): boolean => state === 'connecting' || state === 'playing'
 
-/** git 저장소가 아니면(null) 막지 않는다: 커밋 명령이 스스로 이유를 알려 준다. */
+/** git 저장소가 아니면(null) 막지 않는다: 커밋·정리 명령이 스스로 이유를 알려 준다. */
 async function hasChanges($: EngineInterface): Promise<boolean> {
   await refreshGit($) // 저장된 값은 낡았을 수 있어 누른 순간 다시 읽는다
   const info = await readGitInfo($)
@@ -68,27 +84,27 @@ async function hasChanges($: EngineInterface): Promise<boolean> {
   return info === null || info.changed > 0
 }
 
-// 커밋 버튼: 눌림 하나를 처리하는 동안 들어온 누름은 무시하고(더블클릭이 두 번 실행되는 것을 막는다),
-// 새로 대기시킬 때는 옛 타이머를 끊는다(옛 타이머가 새 대기를 일찍 끝내지 못하게).
-let isCommitBusy = false
+// 확인이 필요한 버튼(커밋·정리): 눌림 하나를 처리하는 동안 들어온 누름은 무시하고(더블클릭이 두 번 실행되는 것을 막는다),
+// 새로 대기시킬 때는 옛 타이머를 끊는다(옛 타이머가 새 대기를 일찍 끝내지 못하게). 한 번에 한 버튼만 대기한다.
+let isPressBusy = false
 let armTimer: Timer | null = null
 
-/** 커밋 버튼 한 번의 누름을 처리한다. 지금 실행해야 하면 true. */
-async function pressCommit($: EngineInterface): Promise<boolean> {
+/** 확인이 필요한 버튼 한 번의 누름을 처리한다. 지금 실행해야 하면 true. */
+async function pressConfirmed($: EngineInterface, key: QuickKey, emptyMessage: string): Promise<boolean> {
   if (!(await hasChanges($))) {
-    $.ui.toast('커밋할 변경이 없어요')
+    $.ui.toast(emptyMessage)
 
     return false
   }
   armTimer?.cancel()
   armTimer = null
-  if (await readArmed($)) {
-    await writeArmed($, false)
+  if ((await readArmed($)) === key) {
+    await writeArmed($, null)
 
     return true
   }
-  await writeArmed($, true)
-  armTimer = $.clock.after(ARM_MS, () => void writeArmed($, false))
+  await writeArmed($, key) // 다른 버튼이 대기 중이었다면 그 대기는 여기서 풀린다
+  armTimer = $.clock.after(ARM_MS, () => void writeArmed($, null))
 
   return false
 }
@@ -165,15 +181,15 @@ export function makeActions($: EngineInterface): Actions {
       const item = QUICK.find(entry => entry.key === key)
 
       if (item === undefined) return
-      if (key !== 'commit') return run(item.command)
-      if (isCommitBusy) return
-      isCommitBusy = true
+      if (item.confirm === undefined) return run(item.command)
+      if (isPressBusy) return
+      isPressBusy = true
       let shouldRun = false
 
       try {
-        shouldRun = await pressCommit($)
+        shouldRun = await pressConfirmed($, key, item.confirm.empty)
       } finally {
-        isCommitBusy = false
+        isPressBusy = false
       }
       if (shouldRun) await run(item.command)
     },

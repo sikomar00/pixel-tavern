@@ -1,6 +1,6 @@
 import type { Elements } from 'claude-code'
 
-import type { SceneId, Today } from '../types'
+import type { QuickKey, SceneId, Today } from '../types'
 import { QUICK } from './actions'
 import type { Actions } from './actions'
 import { ART, composeScene } from './art'
@@ -23,7 +23,7 @@ export type PanelData = BannerData & {
   today: Today
   chatFiles: string[]
   isFilesOpen: boolean
-  isCommitArmed: boolean
+  armedKey: QuickKey | null
   volume: number
   collapsed: string[]
 }
@@ -76,11 +76,11 @@ const settings = (ui: Ui, d: PanelData, act: Actions) => {
   ])
 }
 
-/** 영역 2: 빠른 실행. 버튼만 한 줄에 둔다. 커밋을 한 번 누르면 5초 동안 "한 번 더"로 바뀌고 안내가 붙는다. */
+/** 영역 2: 빠른 실행. 버튼만 한 줄에 둔다. 확인이 필요한 버튼(커밋·정리)은 한 번 누르면 5초 동안 "한 번 더"로 바뀌고 안내가 붙는다. */
 const quick = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
   const buttons = QUICK.map(({ key, label }) => {
-    const isArmed = key === 'commit' && d.isCommitArmed
+    const isArmed = key === d.armedKey
 
     return (
       <Button
@@ -91,11 +91,15 @@ const quick = (ui: Ui, d: PanelData, act: Actions) => {
       />
     )
   })
-  const armed = [
-    <Text color={d.scene.accent} weight="semibold" size="footnote">
-      5초 안에 한 번 더 누르면 변경을 커밋해요
-    </Text>,
-  ]
+  const notice = QUICK.find(item => item.key === d.armedKey)?.confirm?.notice
+  const armed =
+    notice === undefined
+      ? []
+      : [
+          <Text color={d.scene.accent} weight="semibold" size="footnote">
+            {notice}
+          </Text>,
+        ]
 
   return band(ui, d.scene.base, [
     inset(ui, [header(ui, d, { title: '빠른 실행', trailing: [mark(ui, d, act, 'quick')] }), ...cardOf(ui, d, 'quick')]),
@@ -105,7 +109,7 @@ const quick = (ui: Ui, d: PanelData, act: Actions) => {
         <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
           {buttons}
         </Box>,
-        ...(d.isCommitArmed ? armed : []),
+        ...armed,
       ],
       SPACE.control,
     ),

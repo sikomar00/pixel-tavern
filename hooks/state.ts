@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { GitInfo, Mood, RadioState, SceneId, Today, Usage } from '../types'
+import type { GitInfo, Mood, QuickKey, RadioState, SceneId, Today, Usage } from '../types'
 import { todayKey } from './format'
 import { readGit } from './git'
 import { DEFAULT_MOOD, MODES, SCENES } from './scenes'
@@ -21,7 +21,7 @@ const git = atom({ plugin: 'pixel-tavern', key: 'git' } as const, null)
 const model = atom({ plugin: 'pixel-tavern', key: 'model' } as const, null)
 const project = atom({ plugin: 'pixel-tavern', key: 'project' } as const, '')
 const chatFiles = atom({ plugin: 'pixel-tavern', key: 'chatFiles' } as const, [])
-const isCommitArmed = atom({ plugin: 'pixel-tavern', key: 'isCommitArmed' } as const, false)
+const armedKey = atom({ plugin: 'pixel-tavern', key: 'armedKey' } as const, null)
 const tick = atom({ plugin: 'pixel-tavern', key: 'tick' } as const, 0)
 const radio = atom({ plugin: 'pixel-tavern', key: 'radio' } as const, 'off' as RadioState)
 const radioNote = atom({ plugin: 'pixel-tavern', key: 'radioNote' } as const, '')
@@ -157,7 +157,7 @@ export async function readPanel($: EngineInterface) {
   const [t, files, armed, level, isOpen, help, diag, folded] = await Promise.all([
     read($, today),
     read($, chatFiles),
-    read($, isCommitArmed),
+    read($, armedKey),
     read($, volume),
     read($, isFilesOpen),
     read($, openHelp),
@@ -165,7 +165,7 @@ export async function readPanel($: EngineInterface) {
     read($, collapsed),
   ])
 
-  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level, isFilesOpen: isOpen, openHelp: help, isDiag: diag, collapsed: folded }
+  return { today: t, chatFiles: files, armedKey: armed, volume: level, isFilesOpen: isOpen, openHelp: help, isDiag: diag, collapsed: folded }
 }
 
 export function readHidden($: EngineInterface): Promise<boolean> {
@@ -176,8 +176,8 @@ export function readMood($: EngineInterface): Promise<Mood> {
   return read($, mood)
 }
 
-export function readArmed($: EngineInterface): Promise<boolean> {
-  return read($, isCommitArmed)
+export function readArmed($: EngineInterface): Promise<QuickKey | null> {
+  return read($, armedKey)
 }
 
 export function readRadio($: EngineInterface): Promise<RadioState> {
@@ -202,8 +202,8 @@ export async function writeHidden($: EngineInterface, hidden: boolean): Promise<
   await $.store.set('isHidden', hidden)
 }
 
-export async function writeArmed($: EngineInterface, armed: boolean): Promise<void> {
-  await update($, isCommitArmed, () => armed)
+export async function writeArmed($: EngineInterface, armed: QuickKey | null): Promise<void> {
+  await update($, armedKey, () => armed)
 }
 
 export function readFilesOpen($: EngineInterface): Promise<boolean> {

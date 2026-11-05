@@ -10,6 +10,8 @@ export type Mood = { mode: ModeId; sceneByMode: Record<ModeId, SceneId> }
  */
 export type RadioState = 'off' | 'connecting' | 'playing' | 'failed' | 'other'
 
+export type QuickKey = 'review' | 'commit' | 'simplify'
+
 /** 오늘 통계. date가 오늘과 다르면 0부터 다시 센다. */
 export type Today = { date: string; prompts: number; actions: number; files: string[] }
 
@@ -42,7 +44,7 @@ declare module 'claude-code' {
       model: string | null
       project: string
       chatFiles: string[]
-      isCommitArmed: boolean
+      armedKey: QuickKey | null
       tick: number
       radio: RadioState
       radioNote: string
