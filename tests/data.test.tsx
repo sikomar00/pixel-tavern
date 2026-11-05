@@ -273,7 +273,7 @@ test('[데이터] 리셋 시각이 지난 한도는 옛 사용량을 보이지 �
     ],
   } as never
   const panel = usageSvg(SCENES.attic, usage, NOON)
-  const banner = bannerSvg({ scene: SCENES.attic, usage, git: null, model: null, project: 'p', now: NOON, radio: 'off', isMusicAvailable: true })
+  const banner = bannerSvg({ scene: SCENES.attic, usage, git: null, model: null, project: 'p', now: NOON, radio: 'off', isMusicAvailable: true, isStill: false })
 
   expect(panel).toContain('>리셋됨<')
   expect(panel).toContain('>응답 후 갱신<')
