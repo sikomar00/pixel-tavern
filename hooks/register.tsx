@@ -36,6 +36,11 @@ const logFailure = ($: EngineInterface, error: unknown) =>
 
 const ALERT_MS = 8000
 
+/** 거부되거나 실패하지 않고 끝난 호출의 파일만 기록한다. 엔진의 검사 때문에 `$`를 받는 함수는 파일 맨 위에 둔다. */
+const trackIfDone = async ($: EngineInterface, ran: { deny?: unknown; isError?: boolean }, path: unknown): Promise<void> => {
+  if (ran.deny === undefined && ran.isError !== true && typeof path === 'string') await trackFile($, path)
+}
+
 export const register: Register = on => {
   let alerted: Alerted = NO_ALERTS // 이 채팅에서 이미 알린 사용량 구간
 
@@ -114,22 +119,28 @@ export const register: Register = on => {
     return ran
   })
 
-  for (const tool of ['Edit', 'Write'] as const) {
-    on('tool.call', { tool }, async ($, e, next) => {
-      const ran = await next(e)
+  // 파일을 고친 도구마다 훅을 하나씩 둔다. 도구 이름 둘을 도는 반복문 하나로 쓰면 타입 검사기가 두 도구의 합집합으로 입력 모양을 계산하느라
+  // 메모리가 바닥난다(실측: 4GB가 모자람).
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
+    const ran = await next(e)
 
-      if (ran.deny === undefined && ran.isError !== true && typeof e.file_path === 'string') {
-        await trackFile($, e.file_path)
-      }
+    await trackIfDone($, ran, e.file_path)
 
-      return ran
-    })
-  }
+    return ran
+  })
+
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
+    const ran = await next(e)
+
+    await trackIfDone($, ran, e.file_path)
+
+    return ran
+  })
 
   on('tool.call', { tool: 'NotebookEdit' }, async ($, e, next) => {
     const ran = await next(e)
 
-    if (ran.deny === undefined && ran.isError !== true && typeof e.notebook_path === 'string') await trackFile($, e.notebook_path)
+    await trackIfDone($, ran, e.notebook_path)
 
     return ran
   })

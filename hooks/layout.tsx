@@ -1,4 +1,4 @@
-import type { Elements } from 'claude-code'
+import type { Elements, RenderChildren } from 'claude-code'
 
 import type { Actions } from './actions'
 import { helpCard, helpMark } from './help'
@@ -14,7 +14,7 @@ type Ui = Elements['desktop']
 export const isFolded = (d: PanelData, id: string): boolean => d.collapsed.includes(id)
 
 /** 구역: 전체 폭, 위아래 여백. 안쪽 좌우 여백은 inset이 만든다(전체 폭 그림은 그 바깥에 둔다). */
-export const band = (ui: Ui, background: string, children: unknown[]) => {
+export const band = (ui: Ui, background: string, children: RenderChildren[]) => {
   const { Box } = ui
 
   return (
@@ -24,7 +24,7 @@ export const band = (ui: Ui, background: string, children: unknown[]) => {
   )
 }
 
-export const inset = (ui: Ui, children: unknown[], gap: Gap = SPACE.line) => {
+export const inset = (ui: Ui, children: RenderChildren[], gap: Gap = SPACE.line) => {
   const { Box } = ui
 
   return (
@@ -39,7 +39,7 @@ export const mark = (ui: Ui, d: PanelData, act: Actions, id: HelpId) =>
   helpMark(ui, { scene: d.scene, act, id, isOpen: d.openHelp === id })
 
 /** 펼쳐진 설명(열려 있을 때만). 머리글 아래 안쪽 여백 목록에 이어 붙인다. */
-export const cardOf = (ui: Ui, d: PanelData, id: HelpId): unknown[] => (d.openHelp === id ? [helpCard(ui, { scene: d.scene, id })] : [])
+export const cardOf = (ui: Ui, d: PanelData, id: HelpId): RenderChildren[] => (d.openHelp === id ? [helpCard(ui, { scene: d.scene, id })] : [])
 
 /** 접기/펴기 표시(머리글 왼쪽). 접혀 있으면 ▸, 펴져 있으면 ▾. */
 export const chevron = (ui: Ui, d: PanelData, act: Actions, id: string) => {
@@ -60,7 +60,7 @@ export const summary = (ui: Ui, d: PanelData, text: string) => {
 }
 
 /** 제목 줄: 왼쪽은 제목, 오른쪽은 개수·요약·"?" 같은 덧붙임. */
-export const titleRow = (ui: Ui, title: unknown, trailing: unknown[]) => {
+export const titleRow = (ui: Ui, title: RenderChildren, trailing: RenderChildren[]) => {
   const { Box } = ui
 
   return (
@@ -73,7 +73,7 @@ export const titleRow = (ui: Ui, title: unknown, trailing: unknown[]) => {
   )
 }
 
-type HeaderSpec = { title: string; lead?: unknown[]; trailing?: unknown[]; isSub?: boolean }
+type HeaderSpec = { title: string; lead?: RenderChildren[]; trailing?: RenderChildren[]; isSub?: boolean }
 
 /** 머리글(구역의 이름). isSub이면 소제목: 구역 안의 한 단계 아래 묶음이라 머리글보다 조용하다. */
 export const header = (ui: Ui, d: PanelData, { title, lead = [], trailing = [], isSub = false }: HeaderSpec) => {
@@ -98,7 +98,7 @@ export const header = (ui: Ui, d: PanelData, { title, lead = [], trailing = [], 
 }
 
 /** 칩: 상태 하나를 작은 배경 위에 올린다. */
-export const chip = (ui: Ui, d: PanelData, child: unknown) => {
+export const chip = (ui: Ui, d: PanelData, child: RenderChildren) => {
   const { Box } = ui
 
   return (

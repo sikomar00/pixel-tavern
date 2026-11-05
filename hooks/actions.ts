@@ -75,8 +75,8 @@ export type Actions = {
   toggleFiles: () => Promise<void>
 }
 
-async function openPane($: EngineInterface, base: string): Promise<void> {
-  await $.ui.open({ id: PANE_ID, title: PANE_TITLE, backgroundColor: base })
+async function openPane($: EngineInterface): Promise<void> {
+  await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
 }
 
 /** 방송이 켜지는 중이거나 나오는 중인가(꺼짐·실패는 아니다). */
@@ -115,16 +115,12 @@ async function pressConfirmed($: EngineInterface, key: QuickKey, emptyMessage: s
   return false
 }
 
-/** 기분을 저장하고, 이미 열린 패널이면 바깥 배경색도 새 장면 색으로 바꾼다. */
+/** 기분을 저장하고, 음악이 켜져 있으면 새 장면의 방송으로 바꾼다. */
 async function saveMood($: EngineInterface, next: Mood): Promise<void> {
   const before = currentSceneId(await readMood($))
 
   await writeMood($, next)
 
-  if ((await $.ui.panes()).some(pane => pane.id === PANE_ID)) {
-    await openPane($, SCENES[currentSceneId(next)].base)
-  }
-  // 음악이 켜져 있으면 새 장면의 방송으로 바꾼다.
   if (currentSceneId(next) === before) return
   const radio = await readRadio($)
 
@@ -201,7 +197,7 @@ export function makeActions($: EngineInterface): Actions {
 
       if (!filled.isFilled) $.ui.toast(`파일 경로: ${path}`)
     },
-    openPanel: async () => openPane($, SCENES[currentSceneId(await readMood($))].base),
+    openPanel: () => openPane($),
     quick: async key => {
       const item = QUICK.find(entry => entry.key === key)
 
