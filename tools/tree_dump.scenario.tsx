@@ -14,7 +14,7 @@ const usage = (context: number | null, five: number | null) => ({
 type Opts = {
   id: string
   cwd: string
-  scene?: 'attic' | 'tearoom' | 'dungeon' | 'neon'
+  scene?: 'attic' | 'tearoom' | 'jazz' | 'camp' | 'library' | 'dungeon' | 'neon' | 'arcade' | 'drive' | 'station'
   usage: ReturnType<typeof usage>
   isRepo?: boolean
   edits?: number
@@ -24,6 +24,7 @@ type Opts = {
   diag?: boolean // 측정판
   help?: string // 펼쳐 둘 도움말
   fold?: string[] // 접기/펴기를 누를 구역(art, usage, status, files, music, commits)
+  picker?: boolean // 음악의 "방송 바꾸기"를 펼친다
 }
 
 const strip = (node: any): any => ({
@@ -35,7 +36,7 @@ const strip = (node: any): any => ({
 })
 
 const moodOf = (scene: NonNullable<Opts['scene']>) => {
-  const mode = scene === 'dungeon' || scene === 'neon' ? 'adventure' : 'cozy'
+  const mode = ['dungeon', 'neon', 'arcade', 'drive', 'station'].includes(scene) ? 'adventure' : 'cozy'
 
   return { mood: { mode, sceneByMode: { cozy: 'attic', adventure: 'dungeon', [mode]: scene } } }
 }
@@ -93,6 +94,7 @@ const scenario = (opts: Opts) =>
     if (opts.open) await pane.press({ key: 'files-toggle' })
     if (opts.arm) await pane.press({ key: 'commit' })
     if (opts.radio === 'failed' || opts.radio === 'playing') await pane.press({ key: 'radio' })
+    if (opts.picker) await pane.press({ key: 'picker' })
     if (opts.help !== undefined) await pane.press({ key: `help:${opts.help}` })
     for (const id of opts.fold ?? []) await pane.press({ key: `fold:${id}` })
     if (opts.diag) await $.command.run({ command: 'tavern-diag' })
@@ -112,4 +114,5 @@ scenario({ id: 'help', cwd: 'C:/work/demo', scene: 'dungeon', usage: usage(42, 2
 scenario({ id: 'diag', cwd: 'C:/work/demo', usage: usage(42, 23), diag: true })
 scenario({ id: 'commits-open', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['commits'] }) // 커밋 로그를 펼친 상태(예전 기본)
 scenario({ id: 'art-off', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['art'] }) // 그림을 접은 "집중" 상태
+scenario({ id: 'picker-open', cwd: 'C:/work/demo', scene: 'jazz', usage: usage(42, 23), edits: 2, radio: 'playing', picker: true }) // 방송 바꾸기를 펼친 상태
 scenario({ id: 'folded', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['art', 'usage', 'status', 'files', 'music'] }) // 모두 접은 상태
