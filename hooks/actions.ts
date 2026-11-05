@@ -1,4 +1,4 @@
-import type { EngineInterface } from 'claude-code'
+import type { EngineInterface, Timer } from 'claude-code'
 
 import type { ModeId, Mood, SceneId } from '../types'
 import { startRadio, stopRadio } from './radio'
@@ -53,6 +53,31 @@ async function hasChanges($: EngineInterface): Promise<boolean> {
 
   return info === null || info.changed > 0
 }
+// 커밋 버튼: 눌림 하나를 처리하는 동안 들어온 누름은 무시하고(더블클릭이 두 번 실행되는 것을 막는다),
+// 새로 대기시킬 때는 옛 타이머를 끊는다(옛 타이머가 새 대기를 일찍 끝내지 못하게).
+let isCommitBusy = false
+let armTimer: Timer | null = null
+
+/** 커밋 버튼 한 번의 누름을 처리한다. 지금 실행해야 하면 true. */
+async function pressCommit($: EngineInterface): Promise<boolean> {
+  if (!(await hasChanges($))) {
+    $.ui.toast('커밋할 변경이 없어요')
+
+    return false
+  }
+  armTimer?.cancel()
+  armTimer = null
+  if (await readArmed($)) {
+    await writeArmed($, false)
+
+    return true
+  }
+  await writeArmed($, true)
+  armTimer = $.clock.after(ARM_MS, () => void writeArmed($, false))
+
+  return false
+}
+
 
 /** 기분을 저장하고, 이미 열린 패널이면 바깥 배경색도 새 장면 색으로 바꾼다. */
 async function saveMood($: EngineInterface, next: Mood): Promise<void> {
@@ -114,14 +139,16 @@ export function makeActions($: EngineInterface): Actions {
 
       if (item === undefined) return
       if (key !== 'commit') return run(item.command)
-      if (!(await hasChanges($))) return void $.ui.toast('커밋할 변경이 없어요')
-      if (await readArmed($)) {
-        await writeArmed($, false)
+      if (isCommitBusy) return
+      isCommitBusy = true
+      let shouldRun = false
 
-        return run(item.command)
+      try {
+        shouldRun = await pressCommit($)
+      } finally {
+        isCommitBusy = false
       }
-      await writeArmed($, true)
-      $.clock.after(ARM_MS, () => void writeArmed($, false))
+      if (shouldRun) await run(item.command)
     },
   }
 }
