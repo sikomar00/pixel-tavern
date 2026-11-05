@@ -8,7 +8,7 @@ from artlib import Art, Canvas, MARKER, frames, make_strip, shapes, text, PANEL_
 W, H = 85, 96
 NAME = "tearoom"
 BASE = "#3b2417"
-GAUGE_NAME = "찻잔"
+GAUGE_NAME = "컨텍스트"
 P = {
     "wall_a": "#4a2e1c", "wall_b": "#55351f", "wall_c": "#3f2718",
     "wood0": "#24140c", "wood1": "#3a2316", "wood2": "#5a3a22", "wood_hi": "#7b5330", "rail": "#8a5a36",

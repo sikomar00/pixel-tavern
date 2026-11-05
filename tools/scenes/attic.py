@@ -9,7 +9,7 @@ from artlib import Art, Canvas, MARKER, bayer, blink, drift, frames, make_strip,
 W, H = 85, 96
 NAME = "attic"
 BASE = "#1b1b3a"
-GAUGE_NAME = "촛불"
+GAUGE_NAME = "컨텍스트"
 P = {
     "wall0": "#17172f", "wall1": "#202046", "wall2": "#2a2a58",
     "beam0": "#2b1a12", "beam1": "#4a2e1c", "beam2": "#6b4429",

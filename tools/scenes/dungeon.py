@@ -8,7 +8,7 @@ from artlib import Art, Canvas, MARKER, bayer, blink, frames, make_strip, region
 W, H = 85, 96
 NAME = "dungeon"
 BASE = "#0b2b26"
-GAUGE_NAME = "마나"
+GAUGE_NAME = "컨텍스트"
 P = {
     "mortar": "#0a2420", "brick": "#16443d", "brick_hi": "#1c5a50", "dark": "#04120f", "dark2": "#0a1f1b",
     "stone": "#1d5a50", "stone_hi": "#2a7a6c", "glow_floor": "#0d3f2c",

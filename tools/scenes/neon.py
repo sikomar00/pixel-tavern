@@ -8,7 +8,7 @@ from artlib import Art, Canvas, MARKER, blink, frames, make_strip, shapes, text,
 W, H = 85, 96
 NAME = "neon"
 BASE = "#120a1f"
-GAUGE_NAME = "전기"
+GAUGE_NAME = "컨텍스트"
 P = {
     "s0": "#0a0614", "s1": "#150a2a", "s2": "#241044", "s3": "#3a1560", "sil": "#07040f",
     "pink": "#ff2e88", "pink_hi": "#ffd0e8", "cyan": "#00e5ff", "violet": "#8a3aff", "yellow": "#ffd84a",
@@ -172,7 +172,7 @@ def build() -> dict:
         "base": BASE,
         "scene": art.svg(),
         "gauges": [gauge(i) for i in range(21)],
-        "labelSvg": text(75.5, 57, GAUGE_NAME + " {{P}}%", 3.2, P["pink"], 700, "middle", 0.2),
+        "labelSvg": text(67.5, 57, GAUGE_NAME + " {{P}}%", 3.2, P["pink"], 700, "middle", 0.2),
         "labelName": GAUGE_NAME,
         "strip": make_strip(NAME, BASE, P["edge"], emblem, [P["pink"], P["cyan"]]),
     }
