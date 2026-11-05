@@ -64,7 +64,7 @@ register ─┬─ actions ── radio ── state ── git
 2. 모드 다시 불러오기: 엔진이 자식을 함께 끈다(엔진 규칙, 미검증).
 3. 앱 강제 종료: 재생기가 5초마다 부모 프로세스가 살아 있는지 보고 없으면 스스로 끝난다 [실측 4초 이내, 실제 앱에서도 사용자가 확인].
 
-연결이 15초 동안 안 흐르면 다시 연결하고, 5번 실패하면 `gaveup`을 알리고 끝낸다. 한 번이라도 재생되면 횟수를 다시 센다.
+소리가 안 흐르면 점점 길게 기다리며(15초·30초·60초·2분·2분) 다시 연결하고(다시 연결할 때마다 `connecting` 다음에 `retry:번호`를 알려 패널에 "다시 연결하는 중(2/5)"을 보임), 5번 실패하면 `gaveup`을 알리고 끝낸다(약 6분). 한 번이라도 재생되면 횟수를 다시 센다. 다른 채팅의 재생기는 명령줄에 표식과 실행 인자 서명이 둘 다 있는 것만 먼저 끈다.
 
 ## 저장하는 것(`$.store`)
 
@@ -77,5 +77,5 @@ register ─┬─ actions ── radio ── state ── git
 | `tools/gen_art.py`, `artlib.py`, `scenes/*.py` | 글자 격자 → 색칸을 합친 SVG(표준 라이브러리만) |
 | `tools/render_panel.py`, `tree_dump.scenario.tsx` | 미리보기 HTML, 그려진 트리 덤프 |
 | `tools/measured.json` | 실제 앱에서 잰 값(패널 약 388px, 51열×63줄, 글자 칸 7.72px 등) |
-| `tools/player_check.py` | 실제 Windows 재생기 점검 3종 |
+| `tools/player_check.py` | 실제 Windows 재생기 점검 4종(`normal`·`dead`·`orphan`·`kill`) |
 | `tools/git_fixture.py` | 실제 git으로 어려운 파일 이름이 든 임시 저장소를 만들어 `status -z` 출력을 찍음(`tests/git.test.tsx`의 `REAL_Z`와 같아야 함) |
