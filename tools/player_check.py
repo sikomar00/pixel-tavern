@@ -1,8 +1,9 @@
 """실제 Windows에서 재생기 스크립트(hooks/radio.ts 의 PLAYER)를 소리 없이(음량 0) 돌려 보는 점검. 표준 라이브러리만 쓴다.
 
   python tools/player_check.py normal   정상 방송: 'playing'까지 걸리는 시간, CPU, 메모리, 끈 뒤 남는 재생기 (약 30초)
-  python tools/player_check.py dead     죽은 주소: 5번 다시 연결해 보고 'gaveup' 뒤 스스로 끝나는지 (약 100초)
+  python tools/player_check.py dead     죽은 주소: 점점 길게 기다리며 5번 다시 연결해 보고(15초·30초·60초·2분·2분) 'gaveup' 뒤 스스로 끝나는지 (약 6분)
   python tools/player_check.py orphan   부모(엔진 역할) 프로세스를 강제로 죽이면 재생기가 스스로 끝나는지 (약 40초)
+  python tools/player_check.py kill     새 재생기가 켜질 때 옛 재생기만 끄고, 표식 글자만 든(또는 실행 인자만 같은) 다른 powershell은 건드리지 않는지 (약 35초)
 
 주의: 재생기는 시작할 때 이미 켜져 있던 다른 재생기를 끈다(설계). 이 점검을 돌리면 지금 듣고 있는 음악도 꺼진다.
 """
@@ -21,14 +22,23 @@ STREAM = 'http://listen.reyfm.de/lofi_320kbps.mp3'  # hooks/scenes.ts 의 방송
 DEAD_URL = 'http://127.0.0.1:9/'
 
 
-def player_script() -> str:
-    """radio.ts 에서 PLAYER 문자열을 꺼내 ${MARKER}, ${MAX_TRIES} 를 값으로 바꾼다."""
-    src = (ROOT / 'hooks' / 'radio.ts').read_text(encoding='utf-8')
-    body = src.split('export const PLAYER = `', 1)[1].split('\n`', 1)[0]
-    marker = re.search(r"const MARKER = '([^']+)'", src).group(1)  # type: ignore[union-attr]
-    tries = re.search(r'const MAX_TRIES = (\d+)', src).group(1)  # type: ignore[union-attr]
+RADIO_TS = (ROOT / 'hooks' / 'radio.ts').read_text(encoding='utf-8')
 
-    return body.replace('${MARKER}', marker).replace('${MAX_TRIES}', tries)
+
+def launch_args() -> list[str]:
+    """모드가 재생기를 띄울 때 쓰는 실행 인자(radio.ts 의 LAUNCH). 도구도 똑같이 띄워야 실제와 같은 명령줄이 된다."""
+    return re.findall(r"'([^']+)'", re.search(r'const LAUNCH = \[(.+?)\]', RADIO_TS).group(1))  # type: ignore[union-attr]
+
+
+def player_script() -> str:
+    """radio.ts 에서 PLAYER 문자열을 꺼내 ${MARKER}, ${SIGNATURE}, ${RETRY_WAIT_TICKS...}, ${MAX_TRIES} 를 값으로 바꾼다."""
+    body = RADIO_TS.split('export const PLAYER = `', 1)[1].split('\n`', 1)[0]
+    marker = re.search(r"const MARKER = '([^']+)'", RADIO_TS).group(1)  # type: ignore[union-attr]
+    ticks = re.search(r'export const RETRY_WAIT_TICKS = \[([^\]]+)\]', RADIO_TS).group(1)  # type: ignore[union-attr]
+    tries = len([part for part in ticks.split(',') if part.strip()])
+
+    return (body.replace('${MARKER}', marker).replace('${SIGNATURE}', ' '.join(launch_args()))
+            .replace("${RETRY_WAIT_TICKS.join(', ')}", ', '.join(part.strip() for part in ticks.split(','))).replace('${MAX_TRIES}', str(tries)))
 
 
 def ps(command: str) -> str:
@@ -53,7 +63,7 @@ def usage_of(pid: int) -> str:
 
 def start(url: str) -> subprocess.Popen:
     env = dict(os.environ, TAVERN_URL=url, TAVERN_VOLUME='0')
-    argv = ['powershell.exe', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', player_script()]
+    argv = ['powershell.exe', *launch_args(), player_script()]
 
     return subprocess.Popen(argv, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', creationflags=NO_WINDOW)
 
@@ -93,12 +103,34 @@ def dead() -> None:
     lines = collect(proc)
     t0 = time.time()
 
-    while proc.poll() is None and time.time() - t0 < 110:
+    while proc.poll() is None and time.time() - t0 < 420:
         time.sleep(1)
     print('죽은 주소: connecting 시각(초) ' + str([round(t) for t, text in lines if text == 'connecting']))
+    print('retry 신호(시각 초, 내용) ' + str([(round(t), text) for t, text in lines if text.startswith('retry:')]))
     print('gaveup 시각(초) ' + str([round(t) for t, text in lines if text == 'gaveup']))
     print('끝났나: ' + ('아직 살아 있음' if proc.poll() is None else f'예(종료 코드 {proc.poll()})'))
     proc.kill()
+
+
+def alive(proc: subprocess.Popen) -> bool:
+    return proc.poll() is None
+
+
+def kill() -> None:
+    """새 재생기가 켜질 때 옛 재생기만 끄고, 표식 글자만 있거나 실행 인자만 같은 다른 프로세스는 건드리지 않는지 본다."""
+    marker_only = subprocess.Popen(['powershell.exe', '-NoProfile', '-Command', 'Start-Sleep 120 # pixel-tavern-radio'], creationflags=NO_WINDOW)  # 표식만 있다
+    signature_only = subprocess.Popen(['powershell.exe', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', 'Start-Sleep 120'], creationflags=NO_WINDOW)  # 서명만 있다
+    first = start(STREAM)
+
+    time.sleep(9)
+    print(f"두 번째 재생기를 켜기 전: 첫 재생기 {'살아 있음' if alive(first) else '꺼짐'}")
+    second = start(STREAM)
+    time.sleep(12)  # 두 번째가 시작할 때 이전 재생기를 끈다
+    print(f"두 번째 재생기를 켠 뒤: 첫 재생기 {'살아 있음(문제)' if alive(first) else '꺼짐(정상)'}, 두 번째 {'살아 있음(정상)' if alive(second) else '꺼짐(문제)'}")
+    print(f"표식 글자만 든 다른 powershell: {'살아 있음(정상)' if alive(marker_only) else '꺼짐(문제: 잘못 껐다)'}")
+    print(f"실행 인자만 같은 다른 powershell: {'살아 있음(정상)' if alive(signature_only) else '꺼짐(문제: 잘못 껐다)'}")
+    for proc in (marker_only, signature_only, second, first):
+        proc.kill()
 
 
 def parent() -> None:
@@ -125,7 +157,7 @@ def orphan() -> None:
 def main() -> None:
     if sys.argv[1:] == ['--parent']:
         return parent()
-    choice = {'normal': normal, 'dead': dead, 'orphan': orphan}.get(sys.argv[1] if len(sys.argv) > 1 else '')
+    choice = {'normal': normal, 'dead': dead, 'orphan': orphan, 'kill': kill}.get(sys.argv[1] if len(sys.argv) > 1 else '')
 
     if choice is None:
         sys.exit(__doc__)
