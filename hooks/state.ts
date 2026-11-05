@@ -29,6 +29,7 @@ const radio = atom({ plugin: 'pixel-tavern', key: 'radio' } as const, 'off' as R
 const radioNote = atom({ plugin: 'pixel-tavern', key: 'radioNote' } as const, '')
 const volume = atom({ plugin: 'pixel-tavern', key: 'volume' } as const, DEFAULT_VOLUME)
 const isFilesOpen = atom({ plugin: 'pixel-tavern', key: 'isFilesOpen' } as const, false)
+const isPickerOpen = atom({ plugin: 'pixel-tavern', key: 'isPickerOpen' } as const, false) // 음악의 방송 고르기(처음엔 접힘, 저장하지 않는다)
 const isMusicAvailable = atom({ plugin: 'pixel-tavern', key: 'isMusicAvailable' } as const, true)
 const openHelp = atom({ plugin: 'pixel-tavern', key: 'openHelp' } as const, '')
 const isDiag = atom({ plugin: 'pixel-tavern', key: 'isDiag' } as const, false)
@@ -131,17 +132,18 @@ export async function readView($: EngineInterface) {
 }
 
 export async function readPanel($: EngineInterface) {
-  const [files, armed, level, isOpen, help, diag, folded] = await Promise.all([
+  const [files, armed, level, isOpen, isPicking, help, diag, folded] = await Promise.all([
     read($, chatFiles),
     read($, armedKey),
     read($, volume),
     read($, isFilesOpen),
+    read($, isPickerOpen),
     read($, openHelp),
     read($, isDiag),
     read($, collapsed),
   ])
 
-  return { chatFiles: files, armedKey: armed, volume: level, isFilesOpen: isOpen, openHelp: help, isDiag: diag, collapsed: folded }
+  return { chatFiles: files, armedKey: armed, volume: level, isFilesOpen: isOpen, isPickerOpen: isPicking, openHelp: help, isDiag: diag, collapsed: folded }
 }
 
 export function readHidden($: EngineInterface): Promise<boolean> {
@@ -205,6 +207,11 @@ export function readFilesOpen($: EngineInterface): Promise<boolean> {
 
 export async function writeFilesOpen($: EngineInterface, isOpen: boolean): Promise<void> {
   await update($, isFilesOpen, () => isOpen)
+}
+
+/** 방송 고르기를 펼치거나 접는다. 바꾸는 순간의 값에서 뒤집어서, 거의 동시에 두 번 눌러도 한 번이 사라지지 않는다. */
+export async function togglePicker($: EngineInterface): Promise<void> {
+  await update($, isPickerOpen, isOpen => !isOpen)
 }
 
 export async function writeMusicAvailable($: EngineInterface, isAvailable: boolean): Promise<void> {

@@ -1,7 +1,7 @@
 import type { Elements } from 'claude-code'
 
 import type { Actions } from './actions'
-import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
+import { card, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import type { PanelData } from './panel'
 import { SPACE } from './theme'
 import { orderTodos } from './todos'
@@ -22,7 +22,7 @@ export const todo = (ui: Ui, d: PanelData, act: Actions) => {
   const ordered = orderTodos(d.todos)
   const rest = ordered.length - SHOWN
 
-  return band(ui, d.scene.base, [
+  return card(ui, d, [
     inset(ui, [
       header(ui, d, {
         title: '할 일',

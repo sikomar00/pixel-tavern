@@ -88,6 +88,7 @@ declare module 'claude-code' {
       radioNote: string
       volume: number
       isFilesOpen: boolean
+      isPickerOpen: boolean
       isMusicAvailable: boolean
       isDiag: boolean
       collapsed: string[]

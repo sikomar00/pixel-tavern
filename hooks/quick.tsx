@@ -3,7 +3,7 @@ import type { Elements } from 'claude-code'
 import type { Work } from '../types'
 import { QUICK } from './actions'
 import type { Actions } from './actions'
-import { band, cardOf, header, inset, mark } from './layout'
+import { card, cardOf, header, inset, mark } from './layout'
 import type { PanelData } from './panel'
 import { WARN_COLOR } from './svg'
 import { SPACE } from './theme'
@@ -61,7 +61,7 @@ export const quick = (ui: Ui, d: PanelData, act: Actions) => {
           </Text>,
         ]
 
-  return band(ui, d.scene.base, [
+  return card(ui, d, [
     inset(ui, [header(ui, d, { title: '빠른 실행', trailing: [mark(ui, d, act, 'quick')] }), ...cardOf(ui, d, 'quick')]),
     inset(
       ui,

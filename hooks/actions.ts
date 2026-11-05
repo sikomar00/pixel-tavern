@@ -14,6 +14,7 @@ import {
   readMood,
   readOpenHelp,
   toggleDiag,
+  togglePicker,
   toggleStill,
   refreshGit,
   readRadio,
@@ -75,6 +76,7 @@ export type Actions = {
   toggleStill: () => Promise<boolean>
   toggleSection: (id: string) => Promise<void>
   toggleFiles: () => Promise<void>
+  togglePicker: () => Promise<void>
   addTodo: (text: string) => Promise<void>
   toggleTodo: (id: string) => Promise<void>
   starTodo: (id: string) => Promise<void>
@@ -178,6 +180,7 @@ export function makeActions($: EngineInterface): Actions {
       await writeCollapsed($, ids.includes(id) ? ids.filter(entry => entry !== id) : [...ids, id])
     },
     toggleFiles: async () => writeFilesOpen($, !(await readFilesOpen($))),
+    togglePicker: () => togglePicker($),
     // 음량은 재생기를 켤 때 정해지므로, 켜져 있으면 새 음량으로 다시 켠다.
     setVolume: async level => {
       if (!isVolume(level)) return

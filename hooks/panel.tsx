@@ -8,13 +8,13 @@ import { diagBoard } from './diag'
 import type { Frame } from './diag'
 import { shortPath, todayKey } from './format'
 import { gitRows } from './gitrows'
-import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
+import { STRIPE_COLUMNS, band, card, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import { music } from './music'
 import { projectRows } from './projects'
 import { quick } from './quick'
 import { MODES } from './scenes'
 import { stillSvg } from './still'
-import { SPACE, surfaceOf } from './theme'
+import { SPACE, chipOf } from './theme'
 import { todo } from './todo'
 import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
 
@@ -30,6 +30,7 @@ export type PanelData = BannerData & {
   todos: Todo[]
   chatFiles: string[]
   isFilesOpen: boolean
+  isPickerOpen: boolean
   armedKey: QuickKey | null
   work: Work
   volume: number
@@ -39,7 +40,7 @@ export type PanelData = BannerData & {
 type Ui = Elements['desktop']
 
 /*
- * 위에서 아래로: 장면(히어로) → 음악 → 빠른 실행 → 사용량 → 작업 현황 → 만진 파일.
+ * 위에서 아래로: 장면(히어로) → 음악 → 빠른 실행 → 할 일 → 사용량 → 작업 현황 → 만진 파일.
  * 음악은 그림 바로 아래: 장면과 방송이 짝(장면을 바꾸면 방송도 바뀐다)이라 한 묶음으로 보이게 한다.
  * 구역을 짜는 부품은 layout.tsx, 음악 구역은 music.tsx에 있다.
  *
@@ -52,7 +53,8 @@ type Ui = Elements['desktop']
  *           title·bold·강조색           숫자 칸의 숫자 (실측 22px: 한눈에 들어와야 하는 값)
  *   보조    body/footnote·흐린 글자      상태, 안내
  *   메타    caption·흐린 글자           커밋 로그, 개수, 접었을 때의 요약
- * 카드(바탕보다 한 단계 밝은 배경)는 음악·사용량·만진 파일 목록에 쓴다. 나머지는 바탕 위의 띠다.
+ * 구역 여섯(음악·빠른 실행·할 일·사용량·작업 현황·만진 파일)은 모두 같은 카드다: 바탕보다 한 단계 밝은 배경 + 왼쪽 강조 막대,
+ * 카드 사이는 바탕이 비쳐 보이는 간격(layout.tsx의 card). 숫자 칸과 git 칩은 카드보다 한 단계 더 밝다. 위의 장면 고르기 줄과 그림은 카드가 아니라 바탕 위다.
  * 설명은 화면에 늘어놓지 않고 필요한 머리글 오른쪽의 "?"에 둔다(help.tsx).
  */
 const FILES_COLLAPSED = 4 // 파일 목록의 기본 노출 수(전체 보기를 누르면 모두)
@@ -111,10 +113,10 @@ const usageNotes = (ui: Ui, d: PanelData) => {
 /** 영역 2: 사용량 카드. 컨텍스트·5시간 한도·주간 한도를 원 3개로 한 줄에. 접으면 한 줄 요약만 남는다. */
 const usage = (ui: Ui, d: PanelData, act: Actions) => {
   const { Svg } = ui
-  const width = usageWidthFor(d.frame.columns) // 패널 폭에 맞춘다(그림은 앱에서 줄어들지 않는다)
+  const width = usageWidthFor(d.frame.columns - STRIPE_COLUMNS) // 카드 막대를 뺀 폭에 맞춘다(그림은 앱에서 줄어들지 않는다)
   const folded = isFolded(d, 'usage')
 
-  return band(ui, surfaceOf(d.scene), [
+  return card(ui, d, [
     inset(ui, [
       header(ui, d, {
         title: '사용량',
@@ -142,7 +144,7 @@ const counter = (ui: Ui, d: PanelData, value: number, label: string) => {
   const { Box, Text } = ui
 
   return (
-    <Box flexDirection="column" flexGrow={1} backgroundColor={surfaceOf(d.scene)} paddingX={SPACE.control} paddingY={SPACE.control}>
+    <Box flexDirection="column" flexGrow={1} backgroundColor={chipOf(d.scene)} paddingX={SPACE.control} paddingY={SPACE.control}>
       <Text size="title" weight="bold" color={d.scene.accent} tabular>
         {String(value)}
       </Text>
@@ -166,7 +168,7 @@ const status = (ui: Ui, d: PanelData, act: Actions) => {
   const t = d.today.date === todayKey(d.now) ? d.today : { ...d.today, prompts: 0, actions: 0, files: [] }
   const folded = isFolded(d, 'status')
 
-  return band(ui, d.scene.base, [
+  return card(ui, d, [
     inset(ui, [
       header(ui, d, {
         title: '작업 현황',
@@ -223,7 +225,7 @@ const files = (ui: Ui, d: PanelData, act: Actions) => {
     </Text>,
   ]
 
-  return band(ui, surfaceOf(d.scene), [
+  return card(ui, d, [
     inset(ui, [
       header(ui, d, {
         title: '이 채팅에서 만진 파일',
@@ -248,21 +250,23 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
   const percent = d.usage?.percent ?? null
 
   return (
-    <Box flexDirection="column" backgroundColor={d.scene.base} paddingBottom={SPACE.band}>
+    <Box flexDirection="column" backgroundColor={d.scene.base} paddingBottom={SPACE.band} gap={SPACE.band}>
       {d.isDiag ? [diagBoard(ui, { scene: d.scene, frame: d.frame })] : []}
-      {settings(ui, d, act)}
-      {isFolded(d, 'art')
-        ? []
-        : [
-            <Box backgroundColor={d.scene.base} justifyContent="center">
-              <Svg
-                source={stillSvg(composeScene(ART[d.scene.id], percent), d.isStill)}
-                alt={`${d.scene.title}: ${d.scene.motto}`}
-                width={SCENE_WIDTH}
-                height={SCENE_HEIGHT}
-              />
-            </Box>,
-          ]}
+      <Box flexDirection="column">
+        {settings(ui, d, act)}
+        {isFolded(d, 'art')
+          ? []
+          : [
+              <Box backgroundColor={d.scene.base} justifyContent="center">
+                <Svg
+                  source={stillSvg(composeScene(ART[d.scene.id], percent), d.isStill)}
+                  alt={`${d.scene.title}: ${d.scene.motto}`}
+                  width={SCENE_WIDTH}
+                  height={SCENE_HEIGHT}
+                />
+              </Box>,
+            ]}
+      </Box>
       {music(ui, d, act)}
       {quick(ui, d, act)}
       {todo(ui, d, act)}
