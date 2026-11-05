@@ -6,6 +6,7 @@ import { ART } from './art'
 import { fmtReset, fmtTokens, isPast, shortModel } from './format'
 import type { Scene } from './scenes'
 import { clipWidth, svgText, textWidth, WARN_COLOR, WARN_PERCENT } from './svg'
+import { usageSummary } from './usage'
 
 export type BannerData = {
   scene: Scene
@@ -122,13 +123,16 @@ const musicButton = (ui: Ui, d: BannerData, act: Actions) => {
 }
 
 export const bannerView = (ui: Ui, d: BannerData & { isHidden: boolean }, act: Actions) => {
-  const { Box, Button, Svg } = ui
+  const { Box, Button, Svg, Text } = ui
 
   if (d.isHidden) {
-    // 배너를 숨겨도 음악이 켜져 있으면 끌 수 있어야 한다.
+    // 배너를 숨겨도 사용량은 한 줄로 보이고, 음악이 켜져 있으면 끌 수 있어야 한다.
     return (
-      <Box flexDirection="row" gap={1}>
+      <Box flexDirection="row" alignItems="center" gap={1}>
         <Button key="show" plain label="▣ 여관" onPress={() => act.setHidden(false)} />
+        <Text color={d.scene.muted} size="caption">
+          {usageSummary(d.scene, d.usage, d.now)}
+        </Text>
         {d.radio === 'off' ? [] : [musicButton(ui, d, act)]}
       </Box>
     )
