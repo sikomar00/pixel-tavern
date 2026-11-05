@@ -22,7 +22,9 @@ const chatFiles = atom({ plugin: 'pixel-tavern', key: 'chatFiles' } as const, []
 const isCommitArmed = atom({ plugin: 'pixel-tavern', key: 'isCommitArmed' } as const, false)
 const tick = atom({ plugin: 'pixel-tavern', key: 'tick' } as const, 0)
 const radio = atom({ plugin: 'pixel-tavern', key: 'radio' } as const, 'off' as RadioState)
+const radioNote = atom({ plugin: 'pixel-tavern', key: 'radioNote' } as const, '')
 const volume = atom({ plugin: 'pixel-tavern', key: 'volume' } as const, DEFAULT_VOLUME)
+const isFilesOpen = atom({ plugin: 'pixel-tavern', key: 'isFilesOpen' } as const, false)
 
 export const currentSceneId = (m: Mood): SceneId => m.sceneByMode[m.mode]
 
@@ -106,7 +108,7 @@ export async function refresh($: EngineInterface): Promise<void> {
 
 /** 배너와 패널이 함께 쓰는 값. 그리는 중에 부르면 값이 바뀔 때 다시 그려진다. */
 export async function readView($: EngineInterface) {
-  const [m, u, g, mdl, proj, now, rad] = await Promise.all([
+  const [m, u, g, mdl, proj, now, rad, note] = await Promise.all([
     read($, mood),
     read($, usage),
     read($, git),
@@ -114,21 +116,23 @@ export async function readView($: EngineInterface) {
     read($, project),
     $.clock.now(),
     read($, radio),
+    read($, radioNote),
     read($, tick), // 1분마다 남은 시간 표시를 다시 그리게 한다
   ])
 
-  return { scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad }
+  return { scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad, radioNote: note }
 }
 
 export async function readPanel($: EngineInterface) {
-  const [t, files, armed, level] = await Promise.all([
+  const [t, files, armed, level, isOpen] = await Promise.all([
     read($, today),
     read($, chatFiles),
     read($, isCommitArmed),
     read($, volume),
+    read($, isFilesOpen),
   ])
 
-  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level }
+  return { today: t, chatFiles: files, isCommitArmed: armed, volume: level, isFilesOpen: isOpen }
 }
 
 export function readHidden($: EngineInterface): Promise<boolean> {
@@ -169,9 +173,25 @@ export async function writeArmed($: EngineInterface, armed: boolean): Promise<vo
   await update($, isCommitArmed, () => armed)
 }
 
+export function readFilesOpen($: EngineInterface): Promise<boolean> {
+  return read($, isFilesOpen)
+}
+
+export async function writeFilesOpen($: EngineInterface, isOpen: boolean): Promise<void> {
+  await update($, isFilesOpen, () => isOpen)
+}
+
+/** 실패 상태로 바꾸고 이유를 남긴다. 이미 멈춘 재생이면 아무것도 바꾸지 않는다. */
+export async function failRadio($: EngineInterface, note: string, isStale: () => boolean): Promise<void> {
+  if (isStale()) return
+  await update($, radioNote, () => note)
+  await update($, radio, () => 'failed')
+}
+
 /** `isStale`이 참이면 값을 바꾸지 않는다. 이미 멈춘 재생이 늦게 보낸 신호가 상태를 덮어쓰지 못하게 한다. */
 export async function writeRadio($: EngineInterface, next: RadioState, isStale: () => boolean = () => false): Promise<void> {
   await update($, radio, current => (isStale() ? current : next))
+  if (next !== 'failed' && !isStale()) await update($, radioNote, () => '') // 새 시도는 옛 실패 이유를 지운다
 }
 
 export async function writeVolume($: EngineInterface, level: number): Promise<void> {

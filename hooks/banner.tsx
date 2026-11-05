@@ -71,6 +71,7 @@ const gaugeSvg = (x: number, g: Gauge, scene: Scene): string => {
 const noteOf = ({ scene, radio }: BannerData): { text: string; color: string } => {
   if (radio === 'playing') return { text: `♪ ${scene.music.label}`, color: scene.accent }
   if (radio === 'connecting') return { text: '♪ 연결 중…', color: scene.accent }
+  if (radio === 'failed') return { text: '♪ 연결 실패 · ▶로 다시', color: WARN_COLOR }
 
   return { text: scene.motto, color: scene.muted }
 }
@@ -100,7 +101,7 @@ export const bannerText = (d: BannerData): string => {
   return [d.scene.title, ...gauges, ...(d.git === null ? [] : [d.git.branch])].join(' · ')
 }
 
-export const RADIO_ICON: Record<RadioState, string> = { off: '▶', connecting: '…', playing: '■' }
+export const RADIO_ICON: Record<RadioState, string> = { off: '▶', connecting: '…', playing: '■', failed: '▶' }
 
 type Ui = Elements['desktop']
 

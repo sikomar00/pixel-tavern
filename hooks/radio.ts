@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { RadioState, SceneId } from '../types'
 import { SCENES } from './scenes'
-import { readRadio, readVolume, writeRadio } from './state'
+import { failRadio, readRadio, readVolume, writeRadio } from './state'
 import { gainOf } from './volume'
 
 const MARKER = 'pixel-tavern-radio'
@@ -45,7 +45,7 @@ const statusOf = (text: string): RadioState | null => {
 }
 
 const stoppedMessage = (error: string): string =>
-  error === '' ? '음악이 멈췄어요. 다른 채팅에서 음악을 켰거나 재생기가 꺼졌어요' : `음악이 멈췄어요: ${error.slice(0, 80)}`
+  error === '' ? '재생기가 멈췄어요. 다른 채팅에서 음악을 켰을 수 있어요' : `재생기가 멈췄어요: ${error.slice(0, 80)}`
 
 async function warnIfStillConnecting($: EngineInterface, playback: Playback): Promise<void> {
   if (playback.isStopped || (await readRadio($)) !== 'connecting') return
@@ -54,6 +54,7 @@ async function warnIfStillConnecting($: EngineInterface, playback: Playback): Pr
 
 async function listen($: EngineInterface, playback: Playback): Promise<void> {
   let lastError = ''
+  let isFailed = false
   const isStale = () => playback.isStopped
 
   try {
@@ -74,13 +75,19 @@ async function listen($: EngineInterface, playback: Playback): Promise<void> {
 
       if (status !== null) await writeRadio($, status, isStale)
     }
-    if (!playback.isStopped) $.ui.toast(stoppedMessage(lastError))
+    if (!playback.isStopped) {
+      isFailed = true
+      await failRadio($, stoppedMessage(lastError), isStale)
+      $.ui.toast(`음악 연결 실패: ${stoppedMessage(lastError)}`)
+    }
   } catch (error) {
+    isFailed = true
+    await failRadio($, '재생기를 켜지 못했어요(Windows에서만 켤 수 있어요)', isStale)
     $.ui.toast(`음악을 켜지 못했어요: ${String(error)}`)
   } finally {
     if (current === playback) {
       current = null
-      await writeRadio($, 'off')
+      if (!isFailed) await writeRadio($, 'off')
     }
   }
 }
