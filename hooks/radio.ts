@@ -2,33 +2,42 @@ import type { EngineInterface } from 'claude-code'
 
 import type { RadioState, SceneId } from '../types'
 import { SCENES } from './scenes'
-import { failRadio, readRadio, readVolume, writeMusicAvailable, writeRadio, yieldRadio } from './state'
+import { failRadio, noteRadio, readRadio, readVolume, writeMusicAvailable, writeRadio, yieldRadio } from './state'
 import { gainOf } from './volume'
 
 const MARKER = 'pixel-tavern-radio'
 const SLOW_CONNECT_MS = 30_000 // 이만큼 지나도 "연결 중"이면 알려 준다
 // 이 채팅의 이름표. 음악을 켤 때 저장소에 적어 두면, 재생기가 꺼졌을 때 "다른 채팅이 가져갔나"를 알 수 있다.
 // 저장소가 채팅끼리 바로 공유되지 않으면 항상 내 이름표가 읽혀서 예전처럼 "연결 실패"로 보인다(나빠지지는 않는다).
-const MAX_TRIES = 5 // 재생기 스크립트가 방송에 다시 연결해 보는 횟수. 넘으면 포기를 알리고 끝낸다
+// 재생기를 띄울 때 쓰는 실행 인자. 이 인자의 이어 붙임(SIGNATURE)이 명령줄에 있고 MARKER도 있는 프로세스만 "우리 재생기"로 본다:
+// 표식 글자만 든 다른 powershell(점검 명령, 다른 도구)을 잘못 끄지 않게 한다. 실행 인자와 서명이 어긋나지 않게 한 곳에서 정한다.
+const LAUNCH = ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command']
+export const SIGNATURE = LAUNCH.join(' ')
+// 방송에 연결해 보는 차례마다 소리가 흐르기를 기다리는 시간(반 초 단위): 15초, 30초, 60초, 2분, 2분. 점점 길게 기다려 일시적인 끊김에서는
+// 저절로 다시 붙고, 차례가 다 되면(5번) 포기를 알리고 끝낸다. 한 번이라도 소리가 흐르면 처음 차례부터 다시 센다.
+export const RETRY_WAIT_TICKS = [30, 60, 120, 240, 240]
+export const MAX_TRIES = RETRY_WAIT_TICKS.length
 const CHAT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
 /**
  * Windows PowerShell의 MediaPlayer로 방송을 튼다(숨김 창, 주소는 환경변수로 받는다).
- * 반 초마다 "."을 써서 정지 신호를 빨리 알아채게 하고, 15초 넘게 소리가 안 흐르면 다시 연결한다(5번까지, 그래도 안 되면 "gaveup"을 알리고 끝낸다).
+ * 반 초마다 "."을 써서 정지 신호를 빨리 알아채게 하고, 소리가 안 흐르면 점점 길게 기다리며 다시 연결한다(15초·30초·60초·2분·2분, 5번까지.
+ * 다시 연결할 때마다 "connecting" 다음에 "retry:번호"를 알리고, 그래도 안 되면 "gaveup"을 알리고 끝낸다).
  * 부모(엔진) 프로세스가 사라지면 스스로 끝난다: 앱이 강제 종료돼도 소리만 나는 고아가 남지 않는다. 출력 파이프가 끊겨도 .NET은 쓰기 오류를 무시해서 파이프로는 알 수 없다(실험으로 확인).
  * 단, 시작 5초 뒤에도 부모가 살아 있을 때만 감시한다(바로 끝나는 실행기 뒤에 숨은 경우에는 소리가 끊기면 안 된다).
- * 다른 채팅이 켜 둔 재생기(MARKER가 명령줄에 있다)는 먼저 끈다: 소리는 한 곳에서만 난다.
+ * 다른 채팅이 켜 둔 재생기(MARKER와 실행 인자 서명이 둘 다 명령줄에 있다)는 먼저 끈다: 소리는 한 곳에서만 난다.
  */
 export const PLAYER = `
 Add-Type -AssemblyName PresentationCore
 # ${MARKER}
-Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*${MARKER}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*${MARKER}*' -and $_.CommandLine -like '*${SIGNATURE}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 $p = New-Object System.Windows.Media.MediaPlayer
 $p.Volume = [double]$env:TAVERN_VOLUME
 function Say($s) { [Console]::Out.WriteLine($s) }
 $parent = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId
 $age = 0; $watch = $false
 function Open-Radio { $p.Open([uri]$env:TAVERN_URL); $p.Play(); Say 'connecting' }
+$waits = @(${RETRY_WAIT_TICKS.join(', ')})
 $tries = 0
 Open-Radio
 $last = 0.0; $still = 0; $isPlaying = $false
@@ -40,10 +49,12 @@ while ($true) {
   $pos = $p.Position.TotalSeconds
   if ($pos -gt $last + 0.1) { $still = 0; if (-not $isPlaying) { $isPlaying = $true; $tries = 0; Say 'playing' } } else { $still++ }
   $last = $pos
-  if ($still -ge 30) {
+  if ($still -ge $waits[$tries]) {
     $tries++
     if ($tries -ge ${MAX_TRIES}) { Say 'gaveup'; exit }
-    $p.Close(); $isPlaying = $false; $still = 0; $last = 0.0; Open-Radio
+    $p.Close(); $isPlaying = $false; $still = 0; $last = 0.0
+    Open-Radio
+    Say "retry:$($tries + 1)"
   }
   Say '.'
 }
@@ -89,7 +100,7 @@ async function listen($: EngineInterface, playback: Playback): Promise<void> {
 
   try {
     const child = $.process.spawn({
-      argv: ['powershell.exe', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', PLAYER],
+      argv: ['powershell.exe', ...LAUNCH, PLAYER],
       env: { TAVERN_URL: SCENES[playback.sceneId].music.stream, TAVERN_VOLUME: playback.gain },
     })
 
@@ -110,6 +121,10 @@ async function listen($: EngineInterface, playback: Playback): Promise<void> {
       const status = statusOf(text)
 
       if (status !== null) await writeRadio($, status, isStale)
+      const retry = /retry:(\d+)/.exec(text)
+
+      // 다시 연결하는 중이라는 안내는 "연결 중" 상태를 쓴 다음에 붙인다(상태를 쓰면 옛 안내가 지워진다).
+      if (retry !== null) await noteRadio($, `방송에 다시 연결하는 중이에요(${retry[1]}/${MAX_TRIES}번째 시도)`, isStale)
     }
     if (!playback.isStopped && !isSettled) {
       isSettled = true

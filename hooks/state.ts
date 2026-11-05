@@ -225,6 +225,11 @@ export async function failRadio($: EngineInterface, note: string, isStale: () =>
   await update($, radio, () => 'failed')
 }
 
+/** 상태는 그대로 두고 안내 한 줄만 바꾼다(예: 다시 연결하는 중). 이미 멈춘 재생이면 아무것도 바꾸지 않는다. */
+export async function noteRadio($: EngineInterface, note: string, isStale: () => boolean): Promise<void> {
+  if (!isStale()) await update($, radioNote, () => note)
+}
+
 /** `isStale`이 참이면 값을 바꾸지 않는다. 이미 멈춘 재생이 늦게 보낸 신호가 상태를 덮어쓰지 못하게 한다. */
 export async function writeRadio($: EngineInterface, next: RadioState, isStale: () => boolean = () => false): Promise<void> {
   await update($, radio, current => (isStale() ? current : next))

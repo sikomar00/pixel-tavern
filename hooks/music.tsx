@@ -37,7 +37,7 @@ const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
 
 /**
  * 영역 5: 음악 플레이어. 방송 이름(주요) · 상태(보조: 꺼짐/연결 중/재생 중/연결 실패) · 조작(재생·정지, 음량).
- * 실패하면 이유가 한 줄 붙고 버튼이 "다시 시도"가 된다. 접으면 상태 한 줄만 남는다(배너 ▶/■로 계속 조작할 수 있다).
+ * 실패하면 이유가 한 줄 붙고 버튼이 "다시 시도"가 된다(다시 연결하는 중에도 몇 번째 시도인지 한 줄 붙는다). 접으면 상태 한 줄만 남는다(배너 ▶/■로 계속 조작할 수 있다).
  */
 export const music = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
@@ -77,7 +77,7 @@ export const music = (ui: Ui, d: PanelData, act: Actions) => {
             <Text color={isFailed ? WARN_COLOR : isRunning ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
               {RADIO_STATUS[d.radio]}
             </Text>,
-            ...(isFailed && d.radioNote !== ''
+            ...((isFailed || d.radio === 'connecting') && d.radioNote !== ''
               ? [
                   <Text color={d.scene.muted} size="caption">
                     {d.radioNote}
