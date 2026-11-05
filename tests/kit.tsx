@@ -1,7 +1,10 @@
 // 시험 도우미: 가짜 엔진(world), 재생기 흉내, 숫자 읽기, 색 대비 계산. 시험 파일들이 함께 쓴다(시험이 아니라서 *.test.* 가 아니다).
 import type { ToolCallResult } from 'claude-code'
 import { mock } from 'claude-code/testing'
+import type { Mounted } from 'claude-code/testing'
 import { QUICK } from '../hooks/actions'
+import { SCENES } from '../hooks/scenes'
+import type { SceneId } from '../types'
 
 export const NOON = Date.parse('2026-11-04T12:00:00')
 
@@ -44,6 +47,15 @@ export const counter = async (ui: { findAll: (q: object) => Promise<{ text?: str
   const texts = (await ui.findAll({ type: 'Text' })).map(node => node.text)
 
   return texts[texts.indexOf(label) - 1]
+}
+
+/** 패널의 ▶로 원하는 장면이 나올 때까지 넘긴다(장면 수가 늘어도 시험이 깨지지 않는다). 장면 그림의 대체 글에 장면 이름이 있다. */
+export const goToScene = async (pane: Mounted<'desktop', 'Pane'>, id: SceneId): Promise<void> => {
+  for (let step = 0; step < 30; step += 1) {
+    if (String((await pane.findAll({ type: 'Svg' }))[0]?.props.alt).includes(SCENES[id].title)) return
+    await pane.press({ key: 'scene:next' })
+  }
+  throw new Error(`장면 ${id}에 닿지 못했다`)
 }
 
 /** 엔진이 받쳐 주는 호출을 흉내 낸다. 시계와 저장소는 키트가 메모리로 답한다. */

@@ -56,13 +56,13 @@ test('[움직임 끄기] 값이 없는 움직임 태그는 그냥 지우고, 이
   expect(stillSvg('<g><animateTransform attributeName="transform" values="2 3;0 0" dur="1s"/></g>', true)).toBe('<g transform="translate(2 3)"></g>')
 })
 
-test('[움직임 끄기] 진짜 그림 4장(배너 띠·패널 그림·게이지 단계 전부): 움직임이 남지 않고, 모양이 멀쩡하고, 프레임은 첫 장만 보인다', async () => {
+test('[움직임 끄기] 진짜 그림 전부(모든 장면의 배너 띠·패널 그림·게이지 단계): 움직임이 남지 않고, 모양이 멀쩡하고, 프레임은 첫 장만 보인다', async () => {
   for (const [id, art] of Object.entries(ART)) {
     const pictures = [art.strip, ...[null, 0, 5, 42, 100].map(percent => composeScene(art, percent))]
 
     for (const moving of pictures) {
       const still = stillSvg(moving, true)
-      const firsts = [...moving.matchAll(/<g opacity="0"><animate attributeName="opacity" values="([^"]*)"/g)].map(found => found[1]?.split(';')[0])
+      const firsts = [...moving.matchAll(/<g(?: opacity="0")?><animate attributeName="opacity" values="([^"]*)"/g)].map(found => found[1]?.split(';')[0])
 
       expect(count(moving, /<animate/g), `${id}: 움직이는 그림이어야 시험이 뜻이 있다`).toBeGreaterThan(0)
       expect(problemsOf(moving), `${id}: 원본 모양`).toEqual([])

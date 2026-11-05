@@ -1,30 +1,29 @@
 // [기능] 시험. 공용 도우미는 ./kit.tsx 에 있다.
 import { expect, test } from 'claude-code/testing'
-import { SCENES, STATIONS } from '../hooks/scenes'
-import { BAND, COMMIT_LABEL, PANE, START, fakePlayer, newSpy, world } from './kit'
+import { ART } from '../hooks/art'
+import { MODES, SCENES, STATIONS, STATION_GROUPS } from '../hooks/scenes'
+import { BAND, COMMIT_LABEL, PANE, START, fakePlayer, goToScene, newSpy, world } from './kit'
 import type { Env } from './kit'
 
-test('[기능] 배너: ⟳는 4개 장면을 차례로 돌고, ✕로 숨겼다가 다시 연다', async ($, on) => {
+test('[기능] 배너: ⟳는 모든 장면을 차례로 돌고(마지막 다음은 처음), ✕로 숨겼다가 다시 연다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start({ cwd: 'C:/work/p', surface: 'desktop', isInteractive: true })
   await clock.settle()
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const title = async () => String((await ui.find({ type: 'Svg' }))?.props.source)
+  const ids = MODES.flatMap(mode => mode.scenes)
+  const first = ids[0] ?? 'attic'
 
-  expect(await title()).toContain('비 오는 밤 다락방')
-  await ui.press({ key: 'shuffle' })
-  expect(await title()).toContain('7080 다방')
-  await ui.press({ key: 'shuffle' })
-  expect(await title()).toContain('8비트 던전')
-  await ui.press({ key: 'shuffle' })
-  expect(await title()).toContain('네온 펑크 성')
-  await ui.press({ key: 'shuffle' })
-  expect(await title()).toContain('비 오는 밤 다락방') // 한 바퀴
+  expect(await title()).toContain(SCENES[first].title)
+  for (const id of [...ids.slice(1), first]) {
+    await ui.press({ key: 'shuffle' })
+    expect(await title()).toContain(SCENES[id].title)
+  }
   await ui.press({ key: 'hide' })
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   await ui.press({ key: 'show' })
-  expect(await title()).toContain('비 오는 밤 다락방')
+  expect(await title()).toContain(SCENES[first].title)
   await ui.unmount()
 })
 
@@ -48,9 +47,9 @@ test('[기능] 패널: 장면을 고르면 바뀌고, 한도·프로젝트·최�
   expect((await ui.find({ type: 'Text', text: /abc1234/ }))?.text).toContain('배너 추가')
   expect(await ui.find({ type: 'Text', text: /변경 2개/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /올릴 커밋 1/ }))?.text).toBe('올릴 커밋 1 · 받을 커밋 2')
-  await ui.select({ key: 'scene', value: 'dungeon' })
+  await goToScene(ui, 'dungeon')
   expect((await alts())[0]).toContain('8비트 던전')
-  await ui.select({ key: 'scene', value: 'neon' })
+  await goToScene(ui, 'neon')
   expect((await alts())[0]).toContain('네온 펑크 성')
   await ui.unmount()
 })
@@ -93,23 +92,41 @@ test('[기능] 빠른 실행: 바뀐 파일이 없으면 커밋은 알려 주기
   await pane.unmount()
 })
 
-test('[기능] 장면 통합: 장면 선택 칸은 하나뿐이고(방송 고르기는 음악 구역에 따로) 4개 장면이 모두 들어 있다', async ($, on) => {
+test('[기능] 장면 10개: 이름·모토·바탕색·그림이 겹치지 않고, 모드마다 5개이며, 장면마다 기본 방송이 다르다', async () => {
+  const ids = MODES.flatMap(mode => mode.scenes)
+
+  expect(ids).toHaveLength(10)
+  expect(MODES.map(mode => mode.scenes.length)).toEqual([5, 5])
+  for (const field of ['title', 'motto', 'base'] as const) expect(new Set(ids.map(id => SCENES[id][field])).size, field).toBe(10)
+  expect(new Set(ids.map(id => SCENES[id].music.id)).size).toBe(10) // 장면마다 다른 방송으로 시작한다
+  expect(new Set(ids.map(id => ART[id].scene)).size).toBe(10) // 패널 그림이 모두 다르다
+  expect(new Set(ids.map(id => ART[id].strip)).size).toBe(10) // 배너 띠도 모두 다르다
+  for (const id of ids) expect(SCENES[id].mode, id).toBe(MODES.find(mode => mode.scenes.includes(id))?.id) // 모드 표시와 장면 순서가 맞는다
+})
+
+test('[기능] 장면 고르기: ◀ ▶ 버튼으로 한 장면씩 넘기고(끝에서 처음으로 이어짐), 이름과 순서가 보이며, 목록(드롭다운) 선택 칸은 없다', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const selects = await pane.findAll({ type: 'Select' })
+  const ids = MODES.flatMap(mode => mode.scenes)
+  const alt = async () => String((await pane.findAll({ type: 'Svg' }))[0]?.props.alt)
 
-  const scenes = selects.filter(select => select.key === 'scene')
-
-  expect(selects.map(select => select.key).sort()).toEqual(['scene', 'station']) // 모드 선택 같은 칸은 없고, 방송 고르기만 더 있다
-  expect(scenes).toHaveLength(1)
-  expect((scenes[0]?.props.options as { value: string }[]).map(option => option.value)).toEqual(['attic', 'tearoom', 'dungeon', 'neon'])
+  expect(await pane.findAll({ type: 'Select' })).toHaveLength(0) // 스크롤해서 고르는 칸은 어디에도 없다
+  for (const [index, id] of ids.entries()) {
+    expect(await alt()).toContain(SCENES[id].title)
+    expect(await pane.find({ type: 'Text', text: SCENES[id].title })).toBeDefined() // 이름
+    expect(await pane.find({ type: 'Text', text: `${index + 1}/${ids.length}` })).toBeDefined() // 순서
+    await pane.press({ key: 'scene:next' })
+  }
+  expect(await alt()).toContain(SCENES[ids[0] ?? 'attic'].title) // 한 바퀴 돌아 처음
+  await pane.press({ key: 'scene:prev' })
+  expect(await alt()).toContain(SCENES[ids[ids.length - 1] ?? 'neon'].title) // 처음에서 ◀: 마지막으로
   await pane.unmount()
 })
 
-test('[기능] 장면 통합: 패널에서 고른 장면에서 ⟳가 이어서 돈다(마지막 다음은 처음)', async ($, on) => {
+test('[기능] 장면 통합: 패널에서 넘긴 장면에서 ⟳가 이어서 돈다(마지막 다음은 처음)', async ($, on) => {
   const clock = world(on)
 
   await $.session.start(START)
@@ -117,22 +134,16 @@ test('[기능] 장면 통합: 패널에서 고른 장면에서 ⟳가 이어서 
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const title = async () => String((await banner.find({ type: 'Svg' }))?.props.source)
+  const ids = MODES.flatMap(mode => mode.scenes)
 
-  await pane.select({ key: 'scene', value: 'dungeon' })
+  await goToScene(pane, ids[ids.length - 2] ?? 'dungeon') // 마지막 바로 앞
   await banner.press({ key: 'shuffle' })
-  expect(await title()).toContain('네온 펑크 성')
+  expect(await title()).toContain(SCENES[ids[ids.length - 1] ?? 'neon'].title)
   await banner.press({ key: 'shuffle' })
-  expect(await title()).toContain('비 오는 밤 다락방')
+  expect(await title()).toContain(SCENES[ids[0] ?? 'attic'].title)
   await pane.unmount()
   await banner.unmount()
 })
-
-type Options = { value: string; label: string }[]
-
-/** 고르는 칸의 기대 순서: 즐겨찾기(목록 순서)가 위, 나머지(목록 순서)가 아래. 방송 목록이 늘어도 맞는다. */
-const expectedOrder = (stars: string[]): string[] => [...STATIONS.filter(station => stars.includes(station.id)), ...STATIONS.filter(station => !stars.includes(station.id))].map(station => station.id)
-
-const optionsOf = async (pane: { find: (q: object) => Promise<{ props: Record<string, unknown> } | undefined> }): Promise<Options> => ((await pane.find({ key: 'station' }))?.props.options ?? []) as Options
 
 // 사용자가 승인한 방송 서버. 목록에 새 서버가 몰래 들어오지 않게 하는 울타리다(새 방송을 더하면 사용자에게 보여 주고 승인받은 뒤 여기에도 적는다).
 const APPROVED_HOSTS = ['listen.reyfm.de', 'cast.oldpopcafe.net', 'stream.kaaosradio.fi', 'stream.nightride.fm', 'ice1.somafm.com', 'stream.srg-ssr.ch', 'radio.vgmradio.com', 'radio-paralax.de']
@@ -146,10 +157,26 @@ test('[기능] 방송 목록: 주소는 모두 http이고 승인한 서버뿐이
     expect(station.label.trim(), station.id).not.toBe('')
   }
   for (const field of ['id', 'label', 'stream'] as const) expect(new Set(STATIONS.map(station => station[field])).size, field).toBe(STATIONS.length)
+  for (const station of STATIONS) {
+    expect(station.short.trim(), station.id).not.toBe('')
+    expect(Array.from(station.short).length, station.id).toBeLessThanOrEqual(16) // 버튼에 한 줄로 들어가게
+    expect(STATION_GROUPS.map(group => group.id), station.id).toContain(station.group)
+  }
+  for (const group of STATION_GROUPS) expect(STATIONS.some(station => station.group === group.id), group.id).toBe(true) // 빈 묶음 버튼은 없다
+  expect(new Set(STATIONS.map(station => station.short)).size).toBe(STATIONS.length) // 버튼 이름도 겹치지 않는다
   for (const scene of Object.values(SCENES)) expect(STATIONS, scene.id).toContain(scene.music)
 })
 
-test('[기능] 방송 고르기: 장면마다 따로 고르고 기억하며, 켜져 있으면 새 방송으로 다시 켜고, 꺼져 있으면 켜지 않는다', async ($, on) => {
+const keysOf = (group: string): string[] => STATIONS.filter(station => station.group === group).map(station => `station:${station.id}`)
+
+type Pane = { findAll: (query: object) => Promise<{ key?: string; props: Record<string, unknown> }[]>; find: (query: object) => Promise<{ props: Record<string, unknown> } | undefined> }
+
+/** 지금 보이는 방송 버튼들의 이름표(목록 순서). */
+const shownStations = async (pane: Pane): Promise<string[]> => (await pane.findAll({ type: 'Button' })).map(button => String(button.key)).filter(key => key.startsWith('station:'))
+
+const hasText = async (pane: Pane, text: string | RegExp): Promise<boolean> => (await pane.find({ type: 'Text', text })) !== undefined
+
+test('[기능] 방송 고르기: 묶음 버튼으로 방송을 골라 장면마다 따로 기억하고, 켜져 있으면 새 방송으로 다시 켜고, 꺼져 있으면 켜지 않는다', async ($, on) => {
   const store: Record<string, unknown> = {}
   const seen: Env[] = []
   const clock = world(on, { liveStore: store })
@@ -160,30 +187,33 @@ test('[기능] 방송 고르기: 장면마다 따로 고르고 기억하며, 켜
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  const value = async () => (await pane.find({ key: 'station' }))?.props.value
   const note = async () => String((await banner.find({ type: 'Svg' }))?.props.source)
 
-  expect(await value()).toBe('reyfm') // 다락방의 기본 방송
-  await pane.select({ key: 'station', value: 'kaaos' }) // 꺼져 있을 때 고르기: 켜지지는 않는다
+  expect(await hasText(pane, 'REYFM 로파이')).toBe(true) // 다락방의 기본 방송
+  expect(await shownStations(pane)).toEqual(keysOf('calm')) // 지금 방송의 묶음이 먼저 보인다
+  expect((await pane.find({ key: 'station:reyfm' }))?.props.variant).toBe('primary') // 지금 방송은 진한 버튼
+  await pane.press({ key: 'group:game' })
+  expect(await shownStations(pane)).toEqual(keysOf('game'))
+  await pane.press({ key: 'station:kaaos' }) // 꺼져 있을 때 고르기: 켜지지는 않는다
   expect(seen).toHaveLength(0)
-  expect(await value()).toBe('kaaos')
+  expect(await hasText(pane, 'Kaaos 칩튠 라디오')).toBe(true)
   expect(await note()).not.toContain('♪')
   expect(store.stationChoices).toEqual({ attic: 'kaaos' })
   await banner.press({ key: 'music' })
   expect(seen.map(env => env.TAVERN_URL)).toEqual([url('kaaos')])
   expect(await note()).toContain('♪ Kaaos 칩튠 라디오') // 배너도 고른 방송을 보인다
-  await pane.select({ key: 'station', value: 'nightride' }) // 켜져 있을 때 고르기: 새 방송으로 다시 켠다
+  await pane.press({ key: 'group:synth' })
+  await pane.press({ key: 'station:nightride' }) // 켜져 있을 때 고르기: 새 방송으로 다시 켠다
   expect(seen.map(env => env.TAVERN_URL)).toEqual([url('kaaos'), url('nightride')])
   expect(await note()).toContain('♪ Nightride FM 신스웨이브')
-  await pane.select({ key: 'station', value: 'nightride' }) // 같은 방송을 또 고르면 아무 일도 없다
+  await pane.press({ key: 'station:nightride' }) // 같은 방송을 또 고르면 아무 일도 없다
   expect(seen).toHaveLength(2)
-  await banner.press({ key: 'shuffle' }) // 7080 다방: 고른 적이 없으니 기본 방송
-  expect(await value()).toBe('oldpop')
+  await banner.press({ key: 'shuffle' }) // 7080 다방: 고른 적이 없으니 기본 방송, 보이는 묶음도 그 방송의 것으로 돌아온다
+  expect(await hasText(pane, '올드팝카페')).toBe(true)
+  expect(await shownStations(pane)).toEqual(keysOf('oldies'))
   expect(seen[2]?.TAVERN_URL).toBe(url('oldpop'))
-  await banner.press({ key: 'shuffle' })
-  await banner.press({ key: 'shuffle' })
-  await banner.press({ key: 'shuffle' }) // 한 바퀴 돌아 다락방: 고른 방송이 그대로
-  expect(await value()).toBe('nightride')
+  await pane.press({ key: 'scene:prev' }) // 다락방으로 돌아오면 고른 방송이 그대로
+  expect(await hasText(pane, 'Nightride FM 신스웨이브')).toBe(true)
   expect(seen[seen.length - 1]?.TAVERN_URL).toBe(url('nightride'))
   expect(store.stationChoices).toEqual({ attic: 'nightride' }) // 다른 장면은 고르지 않았으니 기록이 없다
   await banner.press({ key: 'music' })
@@ -200,14 +230,17 @@ test('[기능] 방송 고르기: 저장된 선택은 다음 세션에도 이어�
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect((await pane.find({ key: 'station' }))?.props.value).toBe('kaaos') // 다락방에서 고른 방송이 이어진다
+  expect(await hasText(pane, 'Kaaos 칩튠 라디오')).toBe(true) // 다락방에서 고른 방송이 이어진다
+  expect(await shownStations(pane)).toEqual(keysOf('game')) // 지금 방송의 묶음
+  expect((await pane.find({ key: 'station:kaaos' }))?.props.variant).toBe('primary')
   expect((await pane.find({ key: 'favorite' }))?.props.label).toBe('★ 즐겨찾기')
-  expect((await optionsOf(pane)).map(option => option.value)).toEqual(expectedOrder(['kaaos'])) // 즐겨찾기(중복·모르는 방송은 버림)가 맨 위
-  expect((await optionsOf(pane))[0]?.value).toBe('kaaos')
-  await pane.select({ key: 'scene', value: 'tearoom' })
-  expect((await pane.find({ key: 'station' }))?.props.value).toBe('oldpop') // 모르는 방송이 저장돼 있어도 기본 방송으로
-  await pane.select({ key: 'scene', value: 'attic' })
-  await pane.select({ key: 'station', value: 'reyfm' })
+  await pane.press({ key: 'group:fav' })
+  expect(await shownStations(pane)).toEqual(['station:kaaos']) // 즐겨찾기(중복·모르는 방송은 버림)
+  await goToScene(pane, 'tearoom')
+  expect(await hasText(pane, '올드팝카페')).toBe(true) // 모르는 방송이 저장돼 있어도 기본 방송으로
+  await goToScene(pane, 'attic')
+  await pane.press({ key: 'group:calm' })
+  await pane.press({ key: 'station:reyfm' })
   expect(store.stationChoices).toEqual({ attic: 'reyfm' }) // 다시 저장할 때 알 수 없는 장면·방송은 따라오지 않는다
   await pane.press({ key: 'favorite' })
   expect(store.favoriteStations).toEqual(['kaaos', 'reyfm']) // 모르는 방송과 중복도 정리돼 저장된다
@@ -221,12 +254,12 @@ test('[기능] 방송 고르기: 모양이 완전히 틀린 저장값은 기본 
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect((await pane.find({ key: 'station' }))?.props.value).toBe('reyfm')
+  expect(await hasText(pane, 'REYFM 로파이')).toBe(true)
   expect((await pane.find({ key: 'favorite' }))?.props.label).toBe('☆ 즐겨찾기')
   await pane.unmount()
 })
 
-test('[기능] 즐겨찾기: 별로 켜고 끄며, 고르는 칸의 맨 위에 ★와 함께 놓이고, 저장되며, 거의 동시에 두 번 눌러도 한 번이 사라지지 않는다', async ($, on) => {
+test('[기능] 즐겨찾기: ☆로 켜고 끄며, ★ 묶음에 모이고 방송 버튼에는 ★가 붙으며, 저장되고, 거의 동시에 두 번 눌러도 한 번이 사라지지 않는다', async ($, on) => {
   const store: Record<string, unknown> = {}
   const clock = world(on, { liveStore: store })
 
@@ -234,26 +267,31 @@ test('[기능] 즐겨찾기: 별로 켜고 끄며, 고르는 칸의 맨 위에 �
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const label = async () => (await pane.find({ key: 'favorite' }))?.props.label
-  const order = async () => (await optionsOf(pane)).map(option => option.value)
+  const buttonLabel = async (id: string) => (await pane.find({ key: `station:${id}` }))?.props.label
 
   expect(await label()).toBe('☆ 즐겨찾기')
-  expect((await optionsOf(pane)).find(option => option.value === 'reyfm')?.label).toBe('REYFM 로파이 · 기본') // 이 장면(다락방)의 기본 방송 표시
+  expect(await buttonLabel('reyfm')).toBe('REYFM')
   await pane.press({ key: 'favorite' })
   expect(await label()).toBe('★ 즐겨찾기')
   expect(store.favoriteStations).toEqual(['reyfm'])
-  await pane.select({ key: 'station', value: 'nightride' })
-  expect((await optionsOf(pane)).find(option => option.value === 'reyfm')?.label).toBe('★ REYFM 로파이 · 기본') // 고른 방송이 바뀌어도 기본 표시는 장면의 방송에 붙어 있다
+  expect(await buttonLabel('reyfm')).toBe('★ REYFM') // 방송 버튼에도 ★
+  await pane.press({ key: 'group:synth' })
+  await pane.press({ key: 'station:nightride' })
   await pane.press({ key: 'favorite' })
   expect(store.favoriteStations).toEqual(['reyfm', 'nightride'])
-  expect(await order()).toEqual(expectedOrder(['reyfm', 'nightride'])) // 즐겨찾기가 위(목록 순서대로), 나머지는 그 아래
-  expect((await order()).slice(0, 2)).toEqual(['reyfm', 'nightride'])
-  expect((await optionsOf(pane)).map(option => option.label.startsWith('★ '))).toEqual(STATIONS.map((_, index) => index < 2))
+  await pane.press({ key: 'group:fav' })
+  expect(await shownStations(pane)).toEqual(['station:reyfm', 'station:nightride']) // ★ 묶음: 즐겨찾기만, 목록 순서대로
   await pane.press({ key: 'favorite' }) // 지금 방송(nightride)의 별을 끈다
   expect(store.favoriteStations).toEqual(['reyfm'])
+  expect(await shownStations(pane)).toEqual(['station:reyfm'])
   expect(await label()).toBe('☆ 즐겨찾기')
   await Promise.all([pane.press({ key: 'favorite' }), pane.press({ key: 'favorite' })]) // 거의 동시에 두 번: 켰다가 끈다
   expect(store.favoriteStations).toEqual(['reyfm'])
   expect(await label()).toBe('☆ 즐겨찾기')
+  await pane.press({ key: 'station:reyfm' })
+  await pane.press({ key: 'favorite' }) // 마지막 즐겨찾기를 끈다
+  expect(store.favoriteStations).toEqual([])
+  expect(await hasText(pane, /즐겨찾기한 방송이 없어요/)).toBe(true) // 빈 ★ 묶음은 이유를 알려 준다
   await pane.unmount()
 })
 
@@ -270,10 +308,10 @@ test('[기능] 방송 고르기: 연결 실패 표시가 남아 있을 때 다�
   const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
 
   await banner.press({ key: 'music' })
-  expect(await pane.find({ type: 'Text', text: /✕ 연결 실패/ })).toBeDefined()
-  await pane.select({ key: 'station', value: 'kaaos' })
-  expect(await pane.find({ type: 'Text', text: /✕ 연결 실패/ })).toBeUndefined() // 새로 고른 방송에 옛 실패가 붙어 있지 않다
-  expect(await pane.find({ type: 'Text', text: /○ 멈춤/ })).toBeDefined()
+  expect(await hasText(pane, /✕ 연결 실패/)).toBe(true)
+  await pane.press({ key: 'station:groovesalad' })
+  expect(await hasText(pane, /✕ 연결 실패/)).toBe(false) // 새로 고른 방송에 옛 실패가 붙어 있지 않다
+  expect(await hasText(pane, /○ 멈춤/)).toBe(true)
   await pane.unmount()
   await banner.unmount()
 })

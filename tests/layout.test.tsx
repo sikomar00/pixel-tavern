@@ -2,7 +2,7 @@
 import { expect, test } from 'claude-code/testing'
 import { bannerSvg } from '../hooks/banner'
 import { USAGE_HEIGHT, usageSvg, usageWidthFor } from '../hooks/usage'
-import { SCENES } from '../hooks/scenes'
+import { SCENES, MODES } from '../hooks/scenes'
 import { WARN_COLOR, clipWidth } from '../hooks/svg'
 import { TEXT_PRIMARY, chipOf, lift, surfaceOf } from '../hooks/theme'
 import { BAND, METAPHOR_NAMES, NOON, PANE, START, contrast, luminance, world } from './kit'
@@ -96,7 +96,7 @@ test('[레이아웃] 패널 구역이 정해진 순서로 이름표를 달고 �
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const texts = (await pane.findAll({ type: 'Text' })).map(node => node.text)
-  const order = ['음악', '빠른 실행', '사용량', '작업 현황', '이 채팅에서 만진 파일'].map(title => texts.indexOf(title))
+  const order = ['음악', '빠른 실행', '할 일', '사용량', '작업 현황', '이 채팅에서 만진 파일'].map(title => texts.indexOf(title))
 
   expect(order.every(index => index >= 0)).toBe(true)
   expect([...order].sort((a, b) => a - b)).toEqual(order) // 위에서 아래로 이 순서
@@ -149,7 +149,7 @@ test('[레이아웃] 제목 블록: 패널 그림은 296px로 잘려 있고 제�
   await pane.unmount()
 })
 
-for (const id of ['attic', 'tearoom', 'dungeon', 'neon'] as const) {
+for (const id of MODES.flatMap(mode => mode.scenes)) {
   test(`[레이아웃] 장면 ${id}: 패널과 사용량 원이 기능 이름·테마 이름과 함께 그려진다`, async ($, on) => {
     const mood = { mode: SCENES[id].mode, sceneByMode: { cozy: 'attic', adventure: 'dungeon', [SCENES[id].mode]: id } }
     const clock = world(on, { stored: { mood } })
@@ -164,10 +164,7 @@ for (const id of ['attic', 'tearoom', 'dungeon', 'neon'] as const) {
     expect(String(svgs[1]?.props.source)).toContain('>컨텍스트<')
     for (const name of ['컨텍스트', '5시간 한도', '주간 한도']) expect(String(svgs[1]?.props.source), `${id} ${name}`).toContain(`>${name}<`)
     for (const old of METAPHOR_NAMES) expect(String(svgs[1]?.props.source), `${id} ${old}`).not.toContain(`>${old}<`)
-    const station = await pane.find({ key: 'station' }) // 방송 이름은 방송 고르기 칸에 보인다
-
-    expect(station?.props.value).toBe(SCENES[id].music.id)
-    expect((station?.props.options as { value: string; label: string }[]).find(option => option.value === SCENES[id].music.id)?.label).toContain(SCENES[id].music.label)
+    expect((await pane.find({ type: 'Text', text: SCENES[id].music.label }))?.text).toBe(SCENES[id].music.label)
     await pane.unmount()
   })
 }
@@ -210,14 +207,15 @@ test('[레이아웃] 음악은 그림 바로 아래 카드로 놓이고, 사용�
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const all = await pane.findAll({ type: 'Box' })
-  const bands = all.filter(node => node.props.paddingY === 'md') // 구역(띠)들: 설정, 음악, 빠른 실행, 사용량, 작업 현황, 만진 파일
+  const bands = all.filter(node => node.props.paddingY === 'md') // 구역(띠)들: 설정, 음악, 빠른 실행, 할 일, 사용량, 작업 현황, 만진 파일
   const card = surfaceOf(SCENES.attic)
   const tones = bands.map(node => node.props.backgroundColor)
 
   expect(tones[1]).toBe(card) // 설정 다음, 빠른 실행 앞이 음악
-  expect(tones[3]).toBe(card) // 사용량
-  expect(tones[5]).toBe(card) // 만진 파일
+  expect(tones[4]).toBe(card) // 사용량
+  expect(tones[6]).toBe(card) // 만진 파일
   expect(tones[2]).not.toBe(card) // 빠른 실행은 바탕
+  expect(tones[3]).not.toBe(card) // 할 일도 바탕
   const texts = (await pane.findAll({ type: 'Text' })).map(node => node.text)
 
   expect(texts.indexOf('음악')).toBeLessThan(texts.indexOf('빠른 실행'))

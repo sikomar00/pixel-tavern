@@ -241,3 +241,121 @@ test('[사용성] 배너를 숨겨도 사용량은 한 줄로 보이고, 다시 
   expect(await line()).toBeUndefined()
   await banner.unmount()
 })
+
+
+// ── 할 일(구글 태스크처럼 간단히): 항목 · 체크박스 · 우선 표시 ──
+type StoredTodo = { id: string; text: string; done: boolean; star: boolean }
+
+const todosOf = (store: Record<string, unknown>): StoredTodo[] => (store.todos ?? []) as StoredTodo[]
+
+const idOf = (store: Record<string, unknown>, text: string): string => todosOf(store).find(item => item.text === text)?.id ?? ''
+
+/** 화면에 보이는 항목 글자들(위에서 아래 순서). */
+const shownTodos = async (pane: { findAll: (query: object) => Promise<{ text?: string }[]> }, names: string[]): Promise<string[]> =>
+  (await pane.findAll({ type: 'Text' })).map(node => String(node.text)).filter(text => names.includes(text))
+
+test('[사용성] 할 일: 칸에 적고 Enter로 더하면 맨 위에 쌓이고, ☐로 완료(☑)·☆로 우선(★)이 되며, 우선은 위로 완료는 아래로 가고, 완료한 것은 한꺼번에 지운다', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const clock = world(on, { liveStore: store })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const names = ['우유 사기', '빨래', '보고서 쓰기']
+  const label = async (key: string) => (await pane.find({ key }))?.props.label
+
+  expect(await pane.find({ type: 'Text', text: /할 일이 없어요/ })).toBeDefined()
+  for (const text of names) await pane.input({ key: 'todo:new', text })
+  expect(todosOf(store).map(item => item.text)).toEqual(['보고서 쓰기', '빨래', '우유 사기']) // 새 일이 맨 위
+  expect(await shownTodos(pane, names)).toEqual(['보고서 쓰기', '빨래', '우유 사기'])
+  expect(await pane.find({ type: 'Text', text: /할 일이 없어요/ })).toBeUndefined()
+  const wash = idOf(store, '빨래')
+
+  expect(await label(`todo:star:${wash}`)).toBe('☆')
+  await pane.press({ key: `todo:star:${wash}` })
+  expect(await label(`todo:star:${wash}`)).toBe('★')
+  expect(await shownTodos(pane, names)).toEqual(['빨래', '보고서 쓰기', '우유 사기']) // 우선이 위로
+  expect(await label(`todo:done:${wash}`)).toBe('☐')
+  await pane.press({ key: `todo:done:${wash}` })
+  expect(await label(`todo:done:${wash}`)).toBe('☑')
+  expect(await shownTodos(pane, names)).toEqual(['보고서 쓰기', '우유 사기', '빨래']) // 완료는 아래로(우선이어도)
+  expect(await label('todo:clear')).toBe('완료한 것 지우기 (1)')
+  await pane.press({ key: 'todo:clear' })
+  expect(todosOf(store).map(item => item.text)).toEqual(['보고서 쓰기', '우유 사기']) // 완료한 것만 지워진다
+  expect(await pane.find({ key: 'todo:clear' })).toBeUndefined() // 지울 것이 없으면 버튼도 없다
+  await pane.press({ key: `todo:done:${idOf(store, '우유 사기')}` }) // 다시 눌러 완료를 되돌릴 수도 있다
+  await pane.press({ key: `todo:done:${idOf(store, '우유 사기')}` })
+  expect(todosOf(store).find(item => item.text === '우유 사기')?.done).toBe(false)
+  await pane.unmount()
+})
+
+test('[사용성] 할 일: 빈 입력은 무시하고, 줄바꿈 같은 제어 문자는 빼고, 80글자로 자르고, 50개가 차면 더하지 않고 알려 준다', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const spy = newSpy()
+  const clock = world(on, { liveStore: store, spy })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  await pane.input({ key: 'todo:new', text: '   ' })
+  expect(todosOf(store)).toHaveLength(0) // 빈 입력은 저장하지 않는다
+  await pane.input({ key: 'todo:new', text: '줄\n바꿈\u0000' })
+  await pane.input({ key: 'todo:new', text: '가'.repeat(100) })
+  expect(todosOf(store).map(item => item.text)).toEqual(['가'.repeat(80), '줄바꿈'])
+  for (let i = 0; i < 48; i += 1) await pane.input({ key: 'todo:new', text: `일 ${i}` })
+  expect(todosOf(store)).toHaveLength(50)
+  expect(spy.toasts.filter(text => text.includes('50개까지'))).toHaveLength(0)
+  await pane.input({ key: 'todo:new', text: '51번째' })
+  expect(todosOf(store)).toHaveLength(50) // 더하지 않는다
+  expect(todosOf(store).some(item => item.text === '51번째')).toBe(false)
+  expect(spy.toasts.filter(text => text.includes('50개까지'))).toHaveLength(1)
+  await pane.unmount()
+})
+
+test('[사용성] 할 일: 저장된 목록은 다음 세션에도 이어지고(모양이 틀린 항목은 버림), 다른 채팅이 더한 일은 1분 안에 보이고, 내가 더해도 그 일이 지워지지 않는다', async ($, on) => {
+  const store: Record<string, unknown> = {
+    todos: [
+      { id: 'a', text: '저장된 일', done: false, star: true },
+      { id: 'a', text: '같은 id라 버린다', done: false, star: false },
+      { id: 'b', text: 7, done: false, star: false },
+      { id: 'c', text: '   ', done: false, star: false },
+      'garbage',
+    ],
+  }
+  const clock = world(on, { liveStore: store })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const names = ['저장된 일', '같은 id라 버린다', '다른 채팅의 일', '또 다른 일', '내 일']
+
+  expect(await shownTodos(pane, names)).toEqual(['저장된 일'])
+  expect((await pane.find({ key: 'todo:star:a' }))?.props.label).toBe('★') // 우선 표시도 이어진다
+  store.todos = [{ id: 'a', text: '저장된 일', done: false, star: true }, { id: 'z', text: '다른 채팅의 일', done: false, star: false }] // 다른 채팅이 더함
+  await clock.advance(60_000) // 1분마다 오는 갱신
+  expect(await shownTodos(pane, names)).toEqual(['저장된 일', '다른 채팅의 일'])
+  store.todos = [...todosOf(store), { id: 'y', text: '또 다른 일', done: false, star: false }] // 이 채팅이 아직 모르는 사이에 또 더함
+  await pane.input({ key: 'todo:new', text: '내 일' })
+  expect(todosOf(store).map(item => item.text).sort()).toEqual(['내 일', '또 다른 일', '다른 채팅의 일', '저장된 일'].sort()) // 아무것도 지워지지 않았다
+  await pane.unmount()
+})
+
+test('[사용성] 할 일: 거의 동시에 여러 개를 더해도 모두 남고, 접으면 남은 개수만 보인다', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const clock = world(on, { liveStore: store })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  await Promise.all(['가', '나', '다'].map(text => pane.input({ key: 'todo:new', text })))
+  expect(todosOf(store).map(item => item.text).sort()).toEqual(['가', '나', '다'])
+  await pane.press({ key: `todo:done:${idOf(store, '나')}` })
+  await pane.press({ key: 'fold:todo' })
+  expect(await pane.find({ key: 'todo:new' })).toBeUndefined() // 접으면 입력 칸과 항목이 사라지고
+  expect(await pane.find({ type: 'Text', text: '남은 2개' })).toBeDefined() // 남은 개수(완료 빼고)만 남는다
+  await pane.press({ key: 'fold:todo' })
+  expect(await pane.find({ key: 'todo:new' })).toBeDefined()
+  await pane.unmount()
+})

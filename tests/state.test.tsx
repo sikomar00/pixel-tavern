@@ -1,7 +1,7 @@
 // [상태] 시험. 공용 도우미는 ./kit.tsx 에 있다.
 import { expect, test } from 'claude-code/testing'
 import { MODES, SCENES } from '../hooks/scenes'
-import { ARMED_LABEL, BAND, COMMIT_LABEL, PANE, START, fakePlayer, newSpy, world } from './kit'
+import { ARMED_LABEL, BAND, COMMIT_LABEL, PANE, START, fakePlayer, newSpy, world, goToScene } from './kit'
 import type { Env } from './kit'
 
 test('[상태] 빠른 실행: 커밋은 두 번 눌러야 실행된다', async ($, on) => {
@@ -244,7 +244,7 @@ test('[상태] 음악: 실패한 뒤에는 장면을 바꾸면 표시가 지워�
   expect(spawns).toBe(1)
   await pane.press({ key: 'volume-up' })
   expect(spawns).toBe(1) // 켜져 있을 때만 새 음량으로 다시 켠다
-  await pane.select({ key: 'scene', value: 'dungeon' })
+  await goToScene(pane, 'dungeon')
   expect(await status()).toBe('○ 멈춤')
   expect(spawns).toBe(1)
   await pane.unmount()
@@ -293,7 +293,7 @@ test('[상태] 음악: 다른 채팅이 가져가면 연결 실패가 아니라 
   expect(store.radioOwner).not.toBe('another-chat')
   await takeOver(2)
   expect(await status()).toBe('◇ 다른 채팅에서 재생 중')
-  await pane.select({ key: 'scene', value: 'dungeon' }) // 장면을 바꾸면 옛 표시는 지워지고, 저절로 켜지지도 않는다
+  await goToScene(pane, 'dungeon') // 장면을 바꾸면 옛 표시는 지워지고, 저절로 켜지지도 않는다
   expect(await status()).toBe('○ 멈춤')
   expect(spawns).toBe(2)
   await pane.unmount()

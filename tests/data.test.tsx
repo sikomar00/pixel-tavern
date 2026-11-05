@@ -33,7 +33,8 @@ test('[데이터] 순수 도우미: 시간·모델·파일 주소·git 출력 �
 test('[데이터] 장면 그림과 장면 데이터가 어긋나지 않는다', async () => {
   const ids = MODES.flatMap(mode => mode.scenes)
 
-  expect(ids).toHaveLength(4)
+  expect(ids).toHaveLength(10) // 장면은 10개(사용자 요청)
+  expect(Object.keys(ART).sort()).toEqual([...ids].sort()) // 그림이 없는 장면도, 장면이 없는 그림도 없다
   for (const id of ids) {
     const scene = SCENES[id]
     const art = ART[id]
