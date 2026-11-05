@@ -16,9 +16,10 @@ export type Scene = {
   music: { label: string; stream: string }
 }
 
-export const MODES: { id: ModeId; label: string; scenes: SceneId[] }[] = [
-  { id: 'cozy', label: '아늑', scenes: ['attic', 'tearoom'] },
-  { id: 'adventure', label: '모험', scenes: ['dungeon', 'neon'] },
+// 화면에는 보이지 않는다. 저장된 값의 모양(모드별 마지막 장면)과 장면 순서를 위해 남겨 둔다.
+export const MODES: { id: ModeId; scenes: SceneId[] }[] = [
+  { id: 'cozy', scenes: ['attic', 'tearoom'] },
+  { id: 'adventure', scenes: ['dungeon', 'neon'] },
 ]
 
 export const SCENES: Record<SceneId, Scene> = {

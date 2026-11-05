@@ -1,6 +1,6 @@
 import type { EngineInterface, Timer } from 'claude-code'
 
-import type { ModeId, Mood, SceneId } from '../types'
+import type { Mood, SceneId } from '../types'
 import { startRadio, stopRadio } from './radio'
 import { MODES, SCENES } from './scenes'
 import {
@@ -34,7 +34,6 @@ export type Actions = {
   openPanel: () => Promise<void>
   shuffle: () => Promise<void>
   setHidden: (hidden: boolean) => Promise<void>
-  setMode: (mode: ModeId) => Promise<void>
   setScene: (id: SceneId) => Promise<void>
   quick: (key: QuickKey) => Promise<void>
   mentionFile: (path: string) => Promise<void>
@@ -53,6 +52,7 @@ async function hasChanges($: EngineInterface): Promise<boolean> {
 
   return info === null || info.changed > 0
 }
+
 // 커밋 버튼: 눌림 하나를 처리하는 동안 들어온 누름은 무시하고(더블클릭이 두 번 실행되는 것을 막는다),
 // 새로 대기시킬 때는 옛 타이머를 끊는다(옛 타이머가 새 대기를 일찍 끝내지 못하게).
 let isCommitBusy = false
@@ -77,7 +77,6 @@ async function pressCommit($: EngineInterface): Promise<boolean> {
 
   return false
 }
-
 
 /** 기분을 저장하고, 이미 열린 패널이면 바깥 배경색도 새 장면 색으로 바꾼다. */
 async function saveMood($: EngineInterface, next: Mood): Promise<void> {
@@ -110,11 +109,10 @@ export function makeActions($: EngineInterface): Actions {
 
   return {
     setScene,
-    setMode: async mode => saveMood($, { ...(await readMood($)), mode }),
     shuffle: async () => {
       const m = await readMood($)
-      const scenes = MODES.find(entry => entry.id === m.mode)?.scenes ?? []
-      const next = scenes[(scenes.indexOf(currentSceneId(m)) + 1) % scenes.length]
+      const ids = MODES.flatMap(entry => entry.scenes) // 4개 장면을 모드와 상관없이 차례로
+      const next = ids[(ids.indexOf(currentSceneId(m)) + 1) % ids.length]
 
       if (next !== undefined) await setScene(next)
     },

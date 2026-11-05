@@ -117,7 +117,7 @@ export async function readView($: EngineInterface) {
     read($, tick), // 1분마다 남은 시간 표시를 다시 그리게 한다
   ])
 
-  return { mood: m, scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad }
+  return { scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad }
 }
 
 export async function readPanel($: EngineInterface) {

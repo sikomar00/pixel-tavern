@@ -1,6 +1,6 @@
 import type { Elements } from 'claude-code'
 
-import type { ModeId, Mood, RadioState, SceneId, Today } from '../types'
+import type { RadioState, SceneId, Today } from '../types'
 import { QUICK } from './actions'
 import type { Actions, QuickKey } from './actions'
 import { ART, composeScene } from './art'
@@ -8,12 +8,12 @@ import type { BannerData } from './banner'
 import { shortPath, todayKey } from './format'
 import { LIMITS_HEIGHT, LIMITS_WIDTH, limitsSvg } from './limits'
 import { MODES, SCENES } from './scenes'
-import type { Scene } from './scenes'
 import { clip } from './svg'
+import { SPACE, chipOf, surfaceOf } from './theme'
+import type { Gap } from './theme'
 import { MAX_VOLUME } from './volume'
 
 export type PanelData = BannerData & {
-  mood: Mood
   today: Today
   chatFiles: string[]
   isCommitArmed: boolean
@@ -22,47 +22,97 @@ export type PanelData = BannerData & {
 
 type Ui = Elements['desktop']
 
-// 글자 위계: 구역 제목(heading) > 가장 중요한 값(heading/semibold) > 본문(body) > 보조 설명(footnote) > 로그(caption)
+/*
+ * 글자 위계(4단계)
+ *   머리글  body·semibold·강조색        구역의 이름
+ *   주요    heading·semibold·밝은 글자   방송 이름, 프로젝트 이름, 숫자
+ *   보조    body/footnote·흐린 글자      설명, 상태
+ *   메타    caption·흐린 글자           커밋 로그, 개수
+ * 구역(띠)은 전체 폭을 쓴다. 배경은 바탕과 카드(바탕보다 한 단계 밝음)가 번갈아 나온다:
+ *   설정·그림(바탕) → 음악(카드) → 빠른 실행(바탕) → 사용량(카드) → 작업 현황(바탕) → 만진 파일(카드)
+ * 만진 파일은 작업 현황 바로 아래에 붙은 "프로젝트의 상세 영역"이라 소제목을 쓴다.
+ */
 const MAX_FILES = 8
 const SCENE_WIDTH = 340
 const SCENE_HEIGHT = 384
 
-/** 제목이 붙은 구역. 배경은 장면 색이라 그림 아래까지 색이 이어진다. */
-const section = (ui: Ui, scene: Scene, title: string, children: unknown[]) => {
-  const { Box, Text } = ui
+/** 구역: 전체 폭, 위아래 여백. 안쪽 좌우 여백은 inset이 만든다(전체 폭 그림은 그 바깥에 둔다). */
+const band = (ui: Ui, background: string, children: unknown[]) => {
+  const { Box } = ui
 
   return (
-    <Box flexDirection="column" backgroundColor={scene.base} paddingX={1} paddingTop={1}>
-      <Text color={scene.accent} weight="semibold" size="heading">
-        {title}
-      </Text>
+    <Box flexDirection="column" backgroundColor={background} paddingY={SPACE.band} gap={SPACE.stack}>
       {children}
     </Box>
   )
 }
 
-const pickers = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Select } = ui
-  const scenes = MODES.find(entry => entry.id === d.mood.mode)?.scenes ?? []
+const inset = (ui: Ui, children: unknown[], gap: Gap = SPACE.line) => {
+  const { Box } = ui
 
   return (
-    <Box flexDirection="column" backgroundColor={d.scene.base} paddingX={1} paddingTop={1} gap={1}>
-      <Select
-        key="mode"
-        label="모드"
-        options={MODES.map(entry => ({ value: entry.id, label: entry.label }))}
-        value={d.mood.mode}
-        onSelect={value => act.setMode(value as ModeId)}
-      />
+    <Box flexDirection="column" paddingX={SPACE.edge} gap={gap}>
+      {children}
+    </Box>
+  )
+}
+
+/** 머리글: 왼쪽은 구역 이름, 오른쪽은 메타 정보. */
+const header = (ui: Ui, d: PanelData, title: string, meta = '') => {
+  const { Box, Text } = ui
+
+  return (
+    <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={SPACE.control}>
+      <Text color={d.scene.accent} weight="semibold">
+        {title}
+      </Text>
+      {meta === ''
+        ? []
+        : [
+            <Text color={d.scene.muted} size="caption">
+              {meta}
+            </Text>,
+          ]}
+    </Box>
+  )
+}
+
+/** 소제목: 구역 안의 한 단계 아래 묶음(프로젝트의 파일 목록). 머리글보다 조용하다. */
+const subheader = (ui: Ui, d: PanelData, title: string, meta = '') => {
+  const { Box, Text } = ui
+
+  return (
+    <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={SPACE.control}>
+      <Text color={d.scene.muted} weight="semibold" size="footnote">
+        {title}
+      </Text>
+      {meta === ''
+        ? []
+        : [
+            <Text color={d.scene.muted} size="caption">
+              {meta}
+            </Text>,
+          ]}
+    </Box>
+  )
+}
+
+/** 영역 1: 장면 선택. 테마는 4개뿐이라 모드 없이 하나로 고른다. */
+const settings = (ui: Ui, d: PanelData, act: Actions) => {
+  const { Select } = ui
+  const ids = MODES.flatMap(entry => entry.scenes)
+
+  return band(ui, d.scene.base, [
+    inset(ui, [
       <Select
         key="scene"
         label="장면"
-        options={scenes.map(id => ({ value: id, label: SCENES[id].title }))}
+        options={ids.map(id => ({ value: id, label: SCENES[id].title }))}
         value={d.scene.id}
         onSelect={value => act.setScene(value as SceneId)}
-      />
-    </Box>
-  )
+      />,
+    ]),
+  ])
 }
 
 const RADIO_STATUS: Record<RadioState, string> = { off: '○ 멈춤', connecting: '◌ 연결 중…', playing: '● 재생 중' }
@@ -73,7 +123,7 @@ const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
   const bars = '●'.repeat(d.volume) + '○'.repeat(MAX_VOLUME - d.volume)
 
   return (
-    <Box flexDirection="row" gap={1} alignItems="center">
+    <Box flexDirection="row" alignItems="center" gap={SPACE.control}>
       <Text color={d.scene.muted} size="footnote">
         음량
       </Text>
@@ -84,47 +134,60 @@ const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
   )
 }
 
-const musicSection = (ui: Ui, d: PanelData, act: Actions) => {
+/** 영역 1: 음악 플레이어. 방송 이름(주요) · 상태와 설명(보조) · 조작(재생, 음량). 좁으면 조작이 줄바꿈된다. */
+const music = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
   const isOn = d.radio !== 'off'
 
-  return section(ui, d.scene, '음악', [
-    <Text weight="semibold">{d.scene.music.label}</Text>,
-    <Box flexDirection="row" gap={1}>
-      <Text color={isOn ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
-        {RADIO_STATUS[d.radio]}
-      </Text>
-      <Text color={d.scene.muted} size="footnote">
-        24시간 인터넷 라디오
-      </Text>
-    </Box>,
-    <Box flexDirection="row" gap={2} alignItems="center" flexWrap="wrap" paddingTop={1}>
-      <Button
-        key="radio"
-        variant={isOn ? 'secondary' : 'primary'}
-        label={isOn ? '■ 정지' : '▶ 재생'}
-        onPress={() => act.toggleRadio()}
-      />
-      {volumeControls(ui, d, act)}
-    </Box>,
+  return band(ui, surfaceOf(d.scene), [
+    inset(ui, [header(ui, d, '음악')]),
+    inset(ui, [
+      <Text size="heading" weight="semibold">
+        {d.scene.music.label}
+      </Text>,
+      <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
+        <Text color={isOn ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
+          {RADIO_STATUS[d.radio]}
+        </Text>
+        <Text color={d.scene.muted} size="footnote">
+          24시간 인터넷 라디오
+        </Text>
+      </Box>,
+    ]),
+    inset(ui, [
+      <Box flexDirection="row" alignItems="center" gap={SPACE.control} flexWrap="wrap">
+        <Button
+          key="radio"
+          variant={isOn ? 'secondary' : 'primary'}
+          label={isOn ? '■ 정지' : '▶ 재생'}
+          onPress={() => act.toggleRadio()}
+        />
+        {volumeControls(ui, d, act)}
+      </Box>,
+    ]),
   ])
 }
 
+// 버튼 칸의 최소 폭(글자 칸). "한 번 더: 커밋"이 들어갈 만큼이라, 라벨이 바뀌어도 설명이 같은 자리에서 시작한다.
+const QUICK_BUTTON_CELLS = 14
+
 const QUICK_NOTE: Record<QuickKey, string> = {
   review: '코드 검토',
-  commit: '변경 저장 · 두 번 눌러 실행',
+  commit: '변경 저장 · 두 번 눌러요',
   simplify: '코드 다듬기',
 }
 
-/** 버튼마다 한 줄 설명을 곁들인다. 커밋은 한 번 누르면 5초 동안 "한 번 더"로 바뀐다. */
-const quickSection = (ui: Ui, d: PanelData, act: Actions) => {
+/** 영역 2: 빠른 실행. 버튼마다 한 줄 설명(보조)이 같은 줄에 붙는다. 커밋은 한 번 누르면 5초 동안 "한 번 더"로 바뀐다. */
+const quick = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
   const rows = QUICK.map(({ key, label }) => {
     const isArmed = key === 'commit' && d.isCommitArmed
 
     return (
-      <Box flexDirection="row" gap={1} alignItems="center">
-        <Button key={key} label={isArmed ? `한 번 더: ${label}` : label} onPress={() => act.quick(key)} />
+      <Box flexDirection="row" alignItems="center" gap={SPACE.control}>
+        <Box minWidth={QUICK_BUTTON_CELLS}>
+          <Button key={key} label={isArmed ? `한 번 더: ${label}` : label} onPress={() => act.quick(key)} />
+        </Box>
         <Text color={isArmed ? d.scene.accent : d.scene.muted} weight={isArmed ? 'semibold' : 'regular'} size="footnote">
           {isArmed ? '5초 안에 누르면 실행' : QUICK_NOTE[key]}
         </Text>
@@ -132,7 +195,7 @@ const quickSection = (ui: Ui, d: PanelData, act: Actions) => {
     )
   })
 
-  return section(ui, d.scene, '빠른 실행', rows)
+  return band(ui, d.scene.base, [inset(ui, [header(ui, d, '빠른 실행')]), inset(ui, rows, SPACE.control)])
 }
 
 /** 한도 정보가 비어 있을 때 이유를 알려 주고, 막대가 무엇을 뜻하는지 늘 적어 둔다. */
@@ -144,24 +207,37 @@ const limitsNote = (ui: Ui, d: PanelData) => {
   else if (d.usage.limits.length === 0) lines.push('아직 받은 한도 정보가 없어요')
 
   return lines.map(line => (
-    <Text color={d.scene.muted} size="footnote">
+    <Text color={d.scene.muted} size="caption">
       {line}
     </Text>
   ))
 }
 
-const limitsSection = (ui: Ui, d: PanelData) => {
+/** 영역 2: 사용량 한도 카드. 그림은 전체 폭으로 그려서 글자가 줄어들지 않게 한다. */
+const limits = (ui: Ui, d: PanelData) => {
   const { Svg } = ui
 
-  return section(ui, d.scene, '사용량 한도', [
+  return band(ui, surfaceOf(d.scene), [
+    inset(ui, [header(ui, d, '사용량 한도')]),
     <Svg
       source={limitsSvg(d.scene, d.usage, d.now)}
       alt="5시간 사용량과 주간 사용량"
       width={LIMITS_WIDTH}
       height={LIMITS_HEIGHT}
     />,
-    ...limitsNote(ui, d),
+    inset(ui, limitsNote(ui, d)),
   ])
+}
+
+/** 칩: 상태 하나를 작은 배경 위에 올린다. */
+const chip = (ui: Ui, d: PanelData, child: unknown) => {
+  const { Box } = ui
+
+  return (
+    <Box backgroundColor={chipOf(d.scene)} paddingX={SPACE.control} paddingY={SPACE.line}>
+      {child}
+    </Box>
+  )
 }
 
 /** git 저장소가 아니면 오류가 아니라 정보로 보여 준다. */
@@ -180,13 +256,25 @@ const gitRows = (ui: Ui, d: PanelData) => {
   const hint = sync.filter(Boolean).join(' · ')
 
   return [
-    <Box flexDirection="row" gap={2}>
-      <Text weight="semibold">● {git.branch}</Text>
-      <Text color={git.changed > 0 ? scene.accent : scene.muted}>
-        {git.changed > 0 ? `변경 ${git.changed}개` : '변경 없음'}
-      </Text>
+    <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
+      {chip(ui, d, <Text weight="semibold">{git.branch}</Text>)}
+      {chip(
+        ui,
+        d,
+        // 강조색은 글자가 아니라 점에만 쓴다: 칩 배경 위에서 강조색 글자는 대비가 모자라다.
+        <Box flexDirection="row" gap={SPACE.line}>
+          <Text color={git.changed > 0 ? scene.accent : scene.muted}>●</Text>
+          <Text>{git.changed > 0 ? `변경 ${git.changed}개` : '변경 없음'}</Text>
+        </Box>,
+      )}
     </Box>,
-    ...(hint === '' ? [] : [<Text color={scene.muted} size="footnote">{hint}</Text>]),
+    ...(hint === ''
+      ? []
+      : [
+          <Text color={scene.muted} size="footnote">
+            {hint}
+          </Text>,
+        ]),
     ...git.commits.map(c => (
       <Text color={scene.muted} size="caption" mono>
         {c.hash} {clip(c.subject, 38)}
@@ -195,71 +283,83 @@ const gitRows = (ui: Ui, d: PanelData) => {
   ]
 }
 
+/** 숫자 칸: 모든 칸이 같은 폭을 나눠 쓰고, 숫자는 자릿수가 달라도 자리가 흔들리지 않는다(tabular). */
 const counter = (ui: Ui, d: PanelData, value: number, label: string) => {
   const { Box, Text } = ui
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexGrow={1} backgroundColor={surfaceOf(d.scene)} paddingX={SPACE.control} paddingY={SPACE.control}>
       <Text size="heading" weight="bold" color={d.scene.accent} tabular>
         {String(value)}
       </Text>
-      <Text size="footnote" color={d.scene.muted}>
+      <Text size="caption" color={d.scene.muted}>
         {label}
       </Text>
     </Box>
   )
 }
 
-/** 프로젝트와 오늘의 활동을 한곳에: 이름, git 상태, 숫자 세 개. */
-const statusSection = (ui: Ui, d: PanelData) => {
+/** 영역 3: 작업 현황. 프로젝트 이름(주요) · git 상태(칩) · 오늘의 숫자 세 칸. */
+const status = (ui: Ui, d: PanelData) => {
   const { Box, Text } = ui
   const t = d.today.date === todayKey(d.now) ? d.today : { ...d.today, prompts: 0, actions: 0, files: [] }
 
-  return section(ui, d.scene, '작업 현황', [
-    <Text weight="semibold" wrap="truncate-end">
-      {d.project === '' ? '-' : d.project}
-    </Text>,
-    ...gitRows(ui, d),
-    <Text color={d.scene.muted} size="footnote">
-      오늘
-    </Text>,
-    <Box flexDirection="row" gap={3}>
-      {counter(ui, d, t.prompts, '프롬프트')}
-      {counter(ui, d, t.actions, '도구 실행')}
-      {counter(ui, d, t.files.length, '수정 파일')}
-    </Box>,
+  return band(ui, d.scene.base, [
+    inset(ui, [header(ui, d, '작업 현황')]),
+    inset(ui, [
+      <Text size="heading" weight="semibold" wrap="truncate-end">
+        {d.project === '' ? '-' : d.project}
+      </Text>,
+      ...gitRows(ui, d),
+    ]),
+    inset(ui, [
+      <Text color={d.scene.muted} size="caption">
+        오늘
+      </Text>,
+      <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
+        {counter(ui, d, t.prompts, '프롬프트')}
+        {counter(ui, d, t.actions, '도구 실행')}
+        {counter(ui, d, t.files.length, '수정 파일')}
+      </Box>,
+    ]),
   ])
 }
 
-const filesSection = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Button, Text } = ui
+/** 영역 4: 이 채팅에서 만진 파일(프로젝트의 상세). 길면 가로로 넘치지 않게 잘라 낸다. */
+const files = (ui: Ui, d: PanelData, act: Actions) => {
+  const { Box, Button, Text } = ui
   const recent = [...d.chatFiles].reverse()
-  const rows = recent
-    .slice(0, MAX_FILES)
-    .map(path => <Button key={`file:${path}`} plain label={shortPath(path)} onPress={() => act.mentionFile(path)} />)
+  const rows = recent.slice(0, MAX_FILES).map(path => (
+    <Box overflow="hidden">
+      <Button key={`file:${path}`} plain label={shortPath(path)} onPress={() => act.mentionFile(path)} />
+    </Box>
+  ))
   const more = recent.length - MAX_FILES
   const empty = [<Text color={d.scene.muted}>아직 없어요</Text>]
   const hint = [
-    <Text color={d.scene.muted} size="footnote">
+    <Text color={d.scene.muted} size="caption">
       누르면 프롬프트에 @경로로 넣어 줘요
     </Text>,
   ]
 
-  return section(ui, d.scene, '이 채팅에서 만진 파일', [
-    ...(rows.length === 0 ? empty : rows),
-    ...(more > 0 ? [<Text color={d.scene.muted}>외 {more}개</Text>] : []),
-    ...(rows.length === 0 ? [] : hint),
+  return band(ui, surfaceOf(d.scene), [
+    inset(ui, [subheader(ui, d, '이 채팅에서 만진 파일', recent.length === 0 ? '' : `${recent.length}개`)]),
+    inset(ui, [
+      ...(rows.length === 0 ? empty : rows),
+      ...(more > 0 ? [<Text color={d.scene.muted}>외 {more}개</Text>] : []),
+      ...(rows.length === 0 ? [] : hint),
+    ]),
   ])
 }
 
-// 위에서 아래로: 환경(장면·음악) → 작업 제어(빠른 실행·한도) → 작업 현황(프로젝트·파일).
+// 위에서 아래로: 환경(설정·그림·음악) → 작업 제어(빠른 실행·사용량) → 작업 현황(프로젝트·파일).
 export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Svg } = ui
   const percent = d.usage?.percent ?? null
 
   return (
-    <Box flexDirection="column" backgroundColor={d.scene.base} paddingBottom={1}>
-      {pickers(ui, d, act)}
+    <Box flexDirection="column" backgroundColor={d.scene.base} paddingBottom={SPACE.band}>
+      {settings(ui, d, act)}
       <Box backgroundColor={d.scene.base} justifyContent="center">
         <Svg
           source={composeScene(ART[d.scene.id], percent)}
@@ -268,11 +368,11 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
           height={SCENE_HEIGHT}
         />
       </Box>
-      {musicSection(ui, d, act)}
-      {quickSection(ui, d, act)}
-      {limitsSection(ui, d)}
-      {statusSection(ui, d)}
-      {filesSection(ui, d, act)}
+      {music(ui, d, act)}
+      {quick(ui, d, act)}
+      {limits(ui, d)}
+      {status(ui, d)}
+      {files(ui, d, act)}
     </Box>
   )
 }
