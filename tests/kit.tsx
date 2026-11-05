@@ -50,13 +50,13 @@ export type Spy = { ran: string[]; filled: string[]; toasts: string[]; runs: str
 
 export type GitFake = { status: string; exitCode?: number }
 
-export type World = { spy?: Spy; stored?: object; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
+export type World = { runDelaysMs?: number[]; runFails?: boolean; spy?: Spy; stored?: object; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
 
 export const newSpy = (): Spy => ({ ran: [], filled: [], toasts: [], runs: [] })
 
 export const world = (
   on: Parameters<typeof mock.clock>[0],
-  { spy = newSpy(), stored = {}, git = { status: GIT_STATUS }, usage = USAGE, whereExit = 0, tool = { value: { result: {} } }, liveStore }: World = {},
+  { runDelaysMs = [], runFails = false, spy = newSpy(), stored = {}, git = { status: GIT_STATUS }, usage = USAGE, whereExit = 0, tool = { value: { result: {} } }, liveStore }: World = {},
 ) => {
   const clock = mock.clock(on, { now: NOON })
 
@@ -72,11 +72,20 @@ export const world = (
   }
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: { command: 'tavern' } }))
-  on('command.run', (_, e) => {
+  let runCount = 0
+
+  on('command.run', async (_, e) => {
+    const delay = runDelaysMs[runCount] ?? 0 // 세션이 바빠 명령이 줄 서 있는 시간
+
+    runCount += 1
+    if (delay > 0) await clock.sleep(delay)
+    if (runFails) throw new Error('boom') // 명령을 실행하지 못하는 경우
     spy.ran.push(e.command)
 
     return { text: '' }
   })
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
   on('prompt.fill', (_, e) => {
     spy.filled.push(e.text)
 
