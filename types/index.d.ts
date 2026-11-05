@@ -25,12 +25,19 @@ export type Usage = {
   usd: number | null
 }
 
+/** 바뀐 파일의 종류. 새로 만든 것(+), 고친 것(~), 지운 것(-), 이름을 바꾼 것(>), 합치다 충돌한 것(!). */
+export type ChangeKind = 'new' | 'modified' | 'deleted' | 'renamed' | 'conflict'
+
+export type GitFile = { path: string; kind: ChangeKind }
+
 export type GitInfo = {
   branch: string
   changed: number
   ahead: number
   behind: number
   commits: { hash: string; subject: string }[]
+  /** 바뀐 파일. 충돌이 먼저, 나머지는 git이 준 순서. 경로는 저장소 기준이고 제어 문자는 없다. */
+  files: GitFile[]
 }
 
 declare module 'claude-code' {
@@ -40,7 +47,7 @@ declare module 'claude-code' {
       isHidden: boolean
       today: Shaped<Today>
       usage: Usage | null
-      git: GitInfo | null
+      git: Shaped<GitInfo | null>
       model: string | null
       project: string
       chatFiles: string[]

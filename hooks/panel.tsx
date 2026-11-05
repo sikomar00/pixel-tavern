@@ -8,10 +8,10 @@ import type { BannerData } from './banner'
 import { diagBoard } from './diag'
 import type { Frame } from './diag'
 import { shortPath, todayKey } from './format'
-import { band, cardOf, chevron, chip, header, inset, isFolded, mark, summary } from './layout'
+import { gitRows } from './gitrows'
+import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import { music } from './music'
 import { MODES, SCENES } from './scenes'
-import { clip } from './svg'
 import { SPACE, surfaceOf } from './theme'
 import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
 
@@ -160,62 +160,6 @@ const usage = (ui: Ui, d: PanelData, act: Actions) => {
           ...usageNotes(ui, d),
         ]),
   ])
-}
-
-/** git 저장소가 아니면 오류가 아니라 정보로 보여 준다. 최근 커밋 로그는 따로 접는다(기본은 접힘). */
-const gitRows = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Button, Text } = ui
-  const { git, scene } = d
-
-  if (git === null) {
-    return [
-      <Text color={scene.muted} size="footnote">
-        ○ Git 저장소가 아니에요
-      </Text>,
-    ]
-  }
-  const sync = [git.ahead > 0 ? `올릴 커밋 ${git.ahead}` : '', git.behind > 0 ? `받을 커밋 ${git.behind}` : '']
-  const hint = sync.filter(Boolean).join(' · ')
-  const isLogFolded = isFolded(d, 'commits')
-
-  return [
-    <Box flexDirection="row" gap={SPACE.control} flexWrap="wrap">
-      {chip(ui, d, <Text weight="semibold">{git.branch}</Text>)}
-      {chip(
-        ui,
-        d,
-        // 강조색은 글자가 아니라 점에만 쓴다: 칩 배경 위에서 강조색 글자는 대비가 모자라다.
-        <Box flexDirection="row" gap={SPACE.line}>
-          <Text color={git.changed > 0 ? scene.accent : scene.muted}>●</Text>
-          <Text>{git.changed > 0 ? `변경 ${git.changed}개` : '변경 없음'}</Text>
-        </Box>,
-      )}
-    </Box>,
-    ...(hint === ''
-      ? []
-      : [
-          <Text color={scene.muted} size="footnote">
-            {hint}
-          </Text>,
-        ]),
-    ...(git.commits.length === 0
-      ? []
-      : [
-          <Button
-            key="fold:commits"
-            plain
-            label={`${isLogFolded ? '▸' : '▾'} 최근 커밋 ${git.commits.length}개`}
-            onPress={() => act.toggleSection('commits')}
-          />,
-        ]),
-    ...(isLogFolded
-      ? []
-      : git.commits.map(c => (
-          <Text color={scene.muted} size="caption" mono>
-            {c.hash} {clip(c.subject, 38)}
-          </Text>
-        ))),
-  ]
 }
 
 /** 숫자 칸: 모든 칸이 같은 폭을 나눠 쓰고, 숫자는 자릿수가 달라도 자리가 흔들리지 않는다(tabular). */

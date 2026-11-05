@@ -1,6 +1,9 @@
 export const baseName = (path: string): string =>
   path.split(/[\\/]/).filter(Boolean).pop() ?? path
 
+/** 줄바꿈 같은 제어 문자를 뺀다. 엔진은 제어 문자가 든 글자를 거부해 패널 전체를 못 그린다. */
+export const withoutControl = (text: string): string => text.replace(/[\u0000-\u001f\u007f]/g, '')
+
 /** 폴더 이름 하나를 붙여 같은 이름의 파일을 구분한다: `hooks/radio.ts` */
 export const shortPath = (path: string): string => path.split(/[\\/]/).filter(Boolean).slice(-2).join('/')
 

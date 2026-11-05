@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { GitInfo, Mood, QuickKey, RadioState, SceneId, Today, Usage } from '../types'
-import { todayKey } from './format'
+import { todayKey, withoutControl } from './format'
 import { readGit } from './git'
 import { DEFAULT_MOOD, MODES, SCENES } from './scenes'
 import { DEFAULT_VOLUME, isVolume } from './volume'
@@ -10,14 +10,14 @@ import { DEFAULT_VOLUME, isVolume } from './volume'
 // 엔진의 검사(claude plugin validate)는 atom을 읽고 쓰는 파일 안에서 atom을 찾는다.
 // 그래서 atom은 이 파일에만 두고, 바깥에는 `$`를 받는 함수로만 드러낸다.
 // 모양을 바꾸면 shape 태그를 올린다. 이전 버전이 저장한 값은 기본값으로 읽힌다.
-/** 접어 둔 구역(처음 한 번만 쓰는 기본값). art·usage·status·files·music은 구역, commits는 작업 현황의 커밋 로그. */
-const DEFAULT_COLLAPSED: string[] = ['commits']
+/** 접어 둔 구역(처음 한 번만 쓰는 기본값). art·usage·status·files·music은 구역, commits는 작업 현황의 커밋 로그, changes는 바뀐 파일 목록. */
+const DEFAULT_COLLAPSED: string[] = ['commits', 'changes']
 const EMPTY_TODAY: Today = { date: '', prompts: 0, actions: 0, files: [] }
 const mood = atom({ plugin: 'pixel-tavern', key: 'mood' } as const, DEFAULT_MOOD as Mood, { shape: 'mood-1' })
 const today = atom({ plugin: 'pixel-tavern', key: 'today' } as const, EMPTY_TODAY, { shape: 'today-1' })
 const isHidden = atom({ plugin: 'pixel-tavern', key: 'isHidden' } as const, false)
 const usage = atom({ plugin: 'pixel-tavern', key: 'usage' } as const, null)
-const git = atom({ plugin: 'pixel-tavern', key: 'git' } as const, null)
+const git = atom({ plugin: 'pixel-tavern', key: 'git' } as const, null, { shape: 'git-1' }) // git-1: 바뀐 파일 목록(files)이 생겼다
 const model = atom({ plugin: 'pixel-tavern', key: 'model' } as const, null)
 const project = atom({ plugin: 'pixel-tavern', key: 'project' } as const, '')
 const chatFiles = atom({ plugin: 'pixel-tavern', key: 'chatFiles' } as const, [])
@@ -306,7 +306,7 @@ export function countAction($: EngineInterface): Promise<void> {
 /** Claude가 이 채팅에서 고치거나 쓴 파일을 기록한다. */
 export async function trackFile($: EngineInterface, rawPath: string): Promise<void> {
   // 줄바꿈 같은 제어 문자가 든 이름은 엔진이 버튼 이름으로 그리지 못해 패널 전체가 사라진다(시험으로 확인). 프롬프트에 줄이 끼어드는 것도 함께 막힌다.
-  const path = rawPath.replace(/[\u0000-\u001f\u007f]/g, '')
+  const path = withoutControl(rawPath)
 
   if (path === '') return
   await update($, chatFiles, list => (list.includes(path) ? list : [...list, path].slice(-50)))
