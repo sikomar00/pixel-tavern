@@ -18,7 +18,7 @@ const segments = (y: number, percent: number, color: string): string => {
   }).join('')
 }
 
-/** 5시간·주간 한도: 이름과 %, 칸 막대, 리셋까지 남은 시간. */
+/** 5시간·주간 한도: 이름과 사용 %, 칸 막대, 리셋까지 남은 시간. */
 export const limitsSvg = (scene: Scene, usage: Usage | null, now: number): string => {
   const rows = [
     { name: scene.gauges.fiveHour, kind: 'five_hour' },
@@ -34,7 +34,7 @@ export const limitsSvg = (scene: Scene, usage: Usage | null, now: number): strin
 
       return (
         svgText(8, y + 13, name, 12, scene.muted, 700) +
-        svgText(332, y + 13, limit === undefined ? '-' : `${limit.percentUsed}%`, 12, color, 700, 'end') +
+        svgText(332, y + 13, limit === undefined ? '정보 없음' : `${Math.round(limit.percentUsed)}% 사용`, 12, color, 700, 'end') +
         segments(y + 18, percent, color) +
         svgText(8, y + 38, reset, 11, scene.muted)
       )
