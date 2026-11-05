@@ -1,21 +1,19 @@
 import type { Elements } from 'claude-code'
 
-import type { RadioState, SceneId, Today } from '../types'
+import type { SceneId, Today } from '../types'
 import { QUICK } from './actions'
 import type { Actions } from './actions'
 import { ART, composeScene } from './art'
 import type { BannerData } from './banner'
-import { shortPath, todayKey } from './format'
 import { diagBoard } from './diag'
 import type { Frame } from './diag'
-import { helpCard, helpMark } from './help'
-import type { HelpId } from './help'
+import { shortPath, todayKey } from './format'
+import { band, cardOf, chevron, chip, header, inset, isFolded, mark, summary } from './layout'
+import { music } from './music'
 import { MODES, SCENES } from './scenes'
-import { WARN_COLOR, clip } from './svg'
-import { SPACE, chipOf, surfaceOf } from './theme'
-import type { Gap } from './theme'
+import { clip } from './svg'
+import { SPACE, surfaceOf } from './theme'
 import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
-import { MAX_VOLUME } from './volume'
 
 export type PanelData = BannerData & {
   radioNote: string
@@ -33,10 +31,11 @@ export type PanelData = BannerData & {
 type Ui = Elements['desktop']
 
 /*
- * 위에서 아래로: 장면(히어로) → 빠른 실행 → 사용량 → 작업 현황 → 만진 파일 → 음악.
- * 자주 쓰는 것(실행·사용량)이 위에 오고, 음악은 배너의 ▶/■로 늘 켜고 끌 수 있어서 맨 아래에 둔다.
+ * 위에서 아래로: 장면(히어로) → 음악 → 빠른 실행 → 사용량 → 작업 현황 → 만진 파일.
+ * 음악은 그림 바로 아래: 장면과 방송이 짝(장면을 바꾸면 방송도 바뀐다)이라 한 묶음으로 보이게 한다.
+ * 구역을 짜는 부품은 layout.tsx, 음악 구역은 music.tsx에 있다.
  *
- * 접기: 그림·사용량·작업 현황·만진 파일·음악은 머리글 왼쪽의 ▾/▸로 접고 편다(상태는 기억한다).
+ * 접기: 그림·음악·사용량·작업 현황·만진 파일은 머리글 왼쪽의 ▾/▸로 접고 편다(상태는 기억한다).
  * 접으면 머리글 한 줄만 남고, 오른쪽에 그 구역의 한 줄 요약이 보인다. 작업 현황의 커밋 로그는 따로 접는다(기본은 접힘).
  *
  * 글자 위계(4단계)
@@ -45,98 +44,12 @@ type Ui = Elements['desktop']
  *           title·bold·강조색           숫자 칸의 숫자 (실측 22px: 한눈에 들어와야 하는 값)
  *   보조    body/footnote·흐린 글자      상태, 안내
  *   메타    caption·흐린 글자           커밋 로그, 개수, 접었을 때의 요약
- * 카드(바탕보다 한 단계 밝은 배경)는 데이터를 담는 사용량과 만진 파일 목록에만 쓴다. 나머지는 바탕 위의 띠다.
+ * 카드(바탕보다 한 단계 밝은 배경)는 음악·사용량·만진 파일 목록에 쓴다. 나머지는 바탕 위의 띠다.
  * 설명은 화면에 늘어놓지 않고 필요한 머리글 오른쪽의 "?"에 둔다(help.tsx).
  */
 const FILES_COLLAPSED = 4 // 파일 목록의 기본 노출 수(전체 보기를 누르면 모두)
 const SCENE_WIDTH = 340
 const SCENE_HEIGHT = 296 // 그림은 74줄까지(칸 4배)
-
-const isFolded = (d: PanelData, id: string): boolean => d.collapsed.includes(id)
-
-/** 구역: 전체 폭, 위아래 여백. 안쪽 좌우 여백은 inset이 만든다(전체 폭 그림은 그 바깥에 둔다). */
-const band = (ui: Ui, background: string, children: unknown[]) => {
-  const { Box } = ui
-
-  return (
-    <Box flexDirection="column" backgroundColor={background} paddingY={SPACE.band} gap={SPACE.stack}>
-      {children}
-    </Box>
-  )
-}
-
-const inset = (ui: Ui, children: unknown[], gap: Gap = SPACE.line) => {
-  const { Box } = ui
-
-  return (
-    <Box flexDirection="column" paddingX={SPACE.edge} gap={gap}>
-      {children}
-    </Box>
-  )
-}
-
-/** 항목의 "?" 표시. 이 항목의 설명이 펼쳐져 있으면 "×"가 된다. */
-const mark = (ui: Ui, d: PanelData, act: Actions, id: HelpId) =>
-  helpMark(ui, { scene: d.scene, act, id, isOpen: d.openHelp === id })
-
-/** 펼쳐진 설명(열려 있을 때만). 머리글 아래 안쪽 여백 목록에 이어 붙인다. */
-const cardOf = (ui: Ui, d: PanelData, id: HelpId): unknown[] => (d.openHelp === id ? [helpCard(ui, { scene: d.scene, id })] : [])
-
-/** 접기/펴기 표시(머리글 왼쪽). 접혀 있으면 ▸, 펴져 있으면 ▾. */
-const chevron = (ui: Ui, d: PanelData, act: Actions, id: string) => {
-  const { Button } = ui
-
-  return <Button key={`fold:${id}`} plain label={isFolded(d, id) ? '▸' : '▾'} onPress={() => act.toggleSection(id)} />
-}
-
-/** 접었을 때 머리글 오른쪽에 보이는 한 줄 요약. */
-const summary = (ui: Ui, d: PanelData, text: string) => {
-  const { Text } = ui
-
-  return (
-    <Text color={d.scene.muted} size="caption" wrap="truncate-end">
-      {text}
-    </Text>
-  )
-}
-
-/** 제목 줄: 왼쪽은 제목, 오른쪽은 개수·요약·"?" 같은 덧붙임. */
-const titleRow = (ui: Ui, title: unknown, trailing: unknown[]) => {
-  const { Box } = ui
-
-  return (
-    <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={SPACE.control}>
-      {title}
-      <Box flexDirection="row" alignItems="center" gap={SPACE.control}>
-        {trailing}
-      </Box>
-    </Box>
-  )
-}
-
-type HeaderSpec = { title: string; lead?: unknown[]; trailing?: unknown[]; isSub?: boolean }
-
-/** 머리글(구역의 이름). isSub이면 소제목: 구역 안의 한 단계 아래 묶음이라 머리글보다 조용하다. */
-const header = (ui: Ui, d: PanelData, { title, lead = [], trailing = [], isSub = false }: HeaderSpec) => {
-  const { Box, Text } = ui
-  const text = isSub ? (
-    <Text color={d.scene.muted} weight="semibold" size="footnote">
-      {title}
-    </Text>
-  ) : (
-    <Text color={d.scene.accent} weight="semibold">
-      {title}
-    </Text>
-  )
-
-  return titleRow(
-    ui,
-    <Box flexDirection="row" alignItems="center" gap={SPACE.line}>
-      {[...lead, text]}
-    </Box>,
-    trailing,
-  )
-}
 
 /** 영역 1: 장면 선택. 테마는 4개뿐이라 모드 없이 하나로 고른다. 오른쪽에 그림 접기와 "?"(배너 버튼까지 설명). */
 const settings = (ui: Ui, d: PanelData, act: Actions) => {
@@ -243,17 +156,6 @@ const usage = (ui: Ui, d: PanelData, act: Actions) => {
           ...usageNotes(ui, d),
         ]),
   ])
-}
-
-/** 칩: 상태 하나를 작은 배경 위에 올린다. */
-const chip = (ui: Ui, d: PanelData, child: unknown) => {
-  const { Box } = ui
-
-  return (
-    <Box backgroundColor={chipOf(d.scene)} paddingX={SPACE.control} paddingY={SPACE.line}>
-      {child}
-    </Box>
-  )
 }
 
 /** git 저장소가 아니면 오류가 아니라 정보로 보여 준다. 최근 커밋 로그는 따로 접는다(기본은 접힘). */
@@ -417,91 +319,6 @@ const files = (ui: Ui, d: PanelData, act: Actions) => {
   ])
 }
 
-const RADIO_STATUS: Record<RadioState, string> = {
-  off: '○ 멈춤',
-  connecting: '◌ 연결 중…',
-  playing: '● 재생 중',
-  failed: '✕ 연결 실패',
-  other: '◇ 다른 채팅에서 재생 중',
-}
-
-/** 음량 −/+ 와 현재 단계(●가 채운 칸). 켜져 있으면 새 음량으로 방송을 다시 연결한다. */
-const volumeControls = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Button, Text } = ui
-  const bars = '●'.repeat(d.volume) + '○'.repeat(MAX_VOLUME - d.volume)
-
-  return (
-    <Box flexDirection="row" alignItems="center" gap={SPACE.control}>
-      <Text color={d.scene.muted} size="footnote">
-        음량
-      </Text>
-      <Button key="volume-down" label="−" onPress={() => act.setVolume(d.volume - 1)} />
-      <Text>{bars}</Text>
-      <Button key="volume-up" label="+" onPress={() => act.setVolume(d.volume + 1)} />
-    </Box>
-  )
-}
-
-/**
- * 영역 5: 음악 플레이어. 방송 이름(주요) · 상태(보조: 꺼짐/연결 중/재생 중/연결 실패) · 조작(재생·정지, 음량).
- * 실패하면 이유가 한 줄 붙고 버튼이 "다시 시도"가 된다. 접으면 상태 한 줄만 남는다(배너 ▶/■로 계속 조작할 수 있다).
- */
-const music = (ui: Ui, d: PanelData, act: Actions) => {
-  const { Box, Button, Text } = ui
-  const isRunning = d.radio === 'connecting' || d.radio === 'playing'
-  const isFailed = d.radio === 'failed'
-  const label = isRunning ? '■ 정지' : isFailed ? '▶ 다시 시도' : d.radio === 'other' ? '▶ 여기서 켜기' : '▶ 재생'
-  const folded = isFolded(d, 'music')
-
-  // 윈도우가 아니면 음악은 쓸 수 없다: 버튼을 두지 않고 이유만 알린다.
-  if (!d.isMusicAvailable) {
-    return band(ui, d.scene.base, [
-      inset(ui, [
-        header(ui, d, { title: '음악' }),
-        <Text color={d.scene.muted} size="footnote">
-          음악은 Windows에서만 쓸 수 있어요
-        </Text>,
-      ]),
-    ])
-  }
-
-  return band(ui, d.scene.base, [
-    inset(ui, [
-      header(ui, d, {
-        title: '음악',
-        lead: [chevron(ui, d, act, 'music')],
-        trailing: [folded ? summary(ui, d, RADIO_STATUS[d.radio]) : mark(ui, d, act, 'music')],
-      }),
-      ...(folded ? [] : cardOf(ui, d, 'music')),
-    ]),
-    ...(folded
-      ? []
-      : [
-          inset(ui, [
-            <Text size="heading" weight="semibold" wrap="truncate-end">
-              {d.scene.music.label}
-            </Text>,
-            <Text color={isFailed ? WARN_COLOR : isRunning ? d.scene.accent : d.scene.muted} weight="semibold" size="footnote">
-              {RADIO_STATUS[d.radio]}
-            </Text>,
-            ...(isFailed && d.radioNote !== ''
-              ? [
-                  <Text color={d.scene.muted} size="caption">
-                    {d.radioNote}
-                  </Text>,
-                ]
-              : []),
-          ]),
-          inset(ui, [
-            <Box flexDirection="row" alignItems="center" gap={SPACE.control} flexWrap="wrap">
-              <Button key="radio" variant={isRunning ? 'secondary' : 'primary'} label={label} onPress={() => act.toggleRadio()} />
-              {volumeControls(ui, d, act)}
-            </Box>,
-          ]),
-        ]),
-  ])
-}
-
 export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Svg } = ui
   const percent = d.usage?.percent ?? null
@@ -522,11 +339,11 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
               />
             </Box>,
           ]}
+      {music(ui, d, act)}
       {quick(ui, d, act)}
       {usage(ui, d, act)}
       {status(ui, d, act)}
       {files(ui, d, act)}
-      {music(ui, d, act)}
     </Box>
   )
 }
