@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 tools/preview/banner-check.html
+tools/preview/tree-check.html
+zz-*.test.tsx

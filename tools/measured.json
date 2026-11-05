@@ -1,0 +1,9 @@
+{
+  "_출처": "앱의 /tavern-diag 측정판 캡처(2026-11-05, 열 51·줄 63, 데스크톱 dock)를 px 기준자(100px·300px 그림이 화면에서 76%로 찍힘)로 환산한 값. 글자 크기는 Malgun Gothic으로 실제 글자 폭에 맞춰 역산(오차 0.5px 이내). 간격은 상자 크기에서 역산(±1px).",
+  "width": 388,
+  "step": { "xs": 6, "sm": 8, "md": 12, "lg": 16, "xl": 24 },
+  "cell": [7.72, 17],
+  "text": { "caption": 12, "footnote": 13, "body": 14, "heading": 15, "title": 22 },
+  "lineHeight": 1.4286,
+  "button": { "font": 14, "padding": [6, 12] }
+}

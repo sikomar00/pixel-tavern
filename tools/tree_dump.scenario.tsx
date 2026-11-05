@@ -1,0 +1,110 @@
+// 패널의 화면 구성 트리를 JSON으로 덤프하는 시나리오(시험이 아니다: 이름이 *.test.* 가 아니라서 평소에는 돌지 않는다).
+// tools/render_panel.py 가 이 파일을 잠깐 zz-tree.test.tsx 로 복사해 돌리고 지운다. 직접 돌리지 않는다.
+import { expect, mock, test } from 'claude-code/testing'
+
+const NOON = Date.parse('2026-11-04T12:00:00')
+const PANE = { plugin: 'pixel-tavern', component: 'Pane', requestId: 'tavern', props: { title: '여관', isFocused: false, bodyColumns: 51, placement: 'dock', scroll: { offset: 0, bodyRows: 63 }, view: {} } } as const
+
+const usage = (context: number | null, five: number | null) => ({
+  startedAt: 0,
+  context: context === null ? { window: 200000 } : { tokens: 84000, window: 200000, percent: context },
+  rateLimits: five === null ? [] : [{ kind: 'five_hour', percentUsed: five, resetsAt: '2026-11-04T13:37:00' }, { kind: 'seven_day', percentUsed: 45, resetsAt: '2026-11-06T15:00:00' }],
+})
+
+type Opts = {
+  id: string
+  cwd: string
+  scene?: 'attic' | 'tearoom' | 'dungeon' | 'neon'
+  usage: ReturnType<typeof usage>
+  isRepo?: boolean
+  edits?: number
+  open?: boolean // 파일 목록 전체 보기
+  arm?: boolean // 커밋 대기
+  radio?: 'off' | 'playing' | 'failed'
+  diag?: boolean // 측정판
+  help?: string // 펼쳐 둘 도움말
+}
+
+const strip = (node: any): any => ({
+  type: node.type,
+  key: node.key,
+  props: Object.fromEntries(Object.entries(node.props ?? {}).filter(([, value]) => typeof value !== 'function')),
+  text: node.text,
+  children: (node.children ?? []).map((child: any) => (typeof child === 'string' ? child : strip(child))),
+})
+
+const moodOf = (scene: NonNullable<Opts['scene']>) => {
+  const mode = scene === 'dungeon' || scene === 'neon' ? 'adventure' : 'cozy'
+
+  return { mood: { mode, sceneByMode: { cozy: 'attic', adventure: 'dungeon', [mode]: scene } } }
+}
+
+const scenario = (opts: Opts) =>
+  test(`tree ${opts.id}`, async ($, on) => {
+    const clock = mock.clock(on, { now: NOON })
+
+    mock.store(on, opts.scene === undefined ? {} : moodOf(opts.scene))
+    on('session.start', (_, e) => ({ cwd: e.cwd }))
+    on('command.register', () => ({ value: { command: 'tavern' } }))
+    on('command.run', () => ({ text: '' }))
+    on('prompt.fill', () => ({ isFilled: true }))
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.log', () => ({ value: undefined }))
+    on('ui.toast', () => ({ value: undefined }))
+    on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
+    on('session.usage', () => ({ value: opts.usage }))
+    on('process.run', (_, e) => ({
+      value: {
+        exitCode: opts.isRepo === false && e.argv[0] === 'git' ? 128 : 0,
+        stdout: e.argv.includes('status') ? '## main...origin/main [ahead 1, behind 2]\n M a.ts\n?? b.ts\n' : 'abc1234\tfeat: 배너 추가\ndef5678\tfix: 한도 표시\n9a8b7c6\tdocs: README',
+        stderr: '',
+        isStdoutTruncated: false,
+        isStderrTruncated: false,
+      },
+    }))
+    on('tool.call', () => ({ result: {} }))
+    on('ui.render', ($$, e) => {
+      const { Text } = $$.ui.resolve(e)
+
+      return <Text>엔진</Text>
+    })
+    if (opts.radio === 'failed') {
+      // eslint-disable-next-line require-yield
+      on('process.spawn', async function* () {
+        throw new Error('x')
+      })
+    } else {
+      on('process.spawn', async function* () {
+        yield { stream: 'stdout', text: 'connecting\n' }
+        yield { stream: 'stdout', text: 'playing\n' }
+        for (;;) {
+          await clock.sleep(500)
+          yield { stream: 'stdout', text: '.\n' }
+        }
+      })
+    }
+    await $.session.start({ cwd: opts.cwd, surface: 'desktop', isInteractive: true })
+    await clock.settle()
+    for (let i = 1; i <= (opts.edits ?? 0); i++) await $.tool.call({ tool: 'Edit', file_path: `C:/work/p/src/components/file-number-${i}.tsx`, old_string: 'a', new_string: 'b' })
+    const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+    if (opts.open) await pane.press({ key: 'files-toggle' })
+    if (opts.arm) await pane.press({ key: 'commit' })
+    if (opts.radio === 'failed' || opts.radio === 'playing') await pane.press({ key: 'radio' })
+    if (opts.help !== undefined) await pane.press({ key: `help:${opts.help}` })
+    if (opts.diag) await $.command.run({ command: 'tavern-diag' })
+    await clock.settle()
+    const root = (await pane.findAll({ type: 'Box' }))[0]
+
+    console.log('@@TREE@@' + JSON.stringify({ id: opts.id, tree: strip(root) }))
+    expect(true).toBe(true)
+    await pane.unmount()
+  })
+
+// 보고 싶은 상태를 여기에 더한다. id가 화면 제목이 된다.
+scenario({ id: 'default', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2 })
+scenario({ id: 'busy', cwd: 'C:/work/a-very-long-project-name-that-keeps-going-2026-11-04', scene: 'neon', usage: usage(97, 120), edits: 12, open: true, arm: true, radio: 'failed' })
+scenario({ id: 'bare', cwd: 'C:/work/x', scene: 'tearoom', usage: usage(null, null), isRepo: false, radio: 'playing' })
+scenario({ id: 'help', cwd: 'C:/work/demo', scene: 'dungeon', usage: usage(42, 23), help: 'usage' })
+scenario({ id: 'diag', cwd: 'C:/work/demo', usage: usage(42, 23), diag: true })
