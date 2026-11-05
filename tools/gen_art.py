@@ -14,7 +14,7 @@ sys.path.insert(0, str(TOOLS))
 
 from artlib import MAX_SVG_BYTES, write_preview, write_ts  # noqa: E402
 
-SCENES = ["attic", "tearoom", "dungeon", "neon"]
+SCENES = ["attic", "tearoom", "dungeon", "neon", "jazz", "camp", "library", "arcade", "drive", "station"]
 
 
 def check_size(name: str, art: dict) -> int:
