@@ -28,6 +28,7 @@ export const QUICK: { key: QuickKey; label: string; command: string }[] = [
   { key: 'simplify', label: '정리', command: 'simplify' },
 ]
 
+const HELP_TOAST_MS = 9000
 const ARM_MS = 5000 // 커밋 버튼을 한 번 누른 뒤 다시 누를 수 있는 시간
 
 export type Actions = {
@@ -39,6 +40,7 @@ export type Actions = {
   mentionFile: (path: string) => Promise<void>
   toggleRadio: () => Promise<void>
   setVolume: (level: number) => Promise<void>
+  explain: (text: string) => void
 }
 
 async function openPane($: EngineInterface, base: string): Promise<void> {
@@ -117,6 +119,8 @@ export function makeActions($: EngineInterface): Actions {
       if (next !== undefined) await setScene(next)
     },
     setHidden: hidden => writeHidden($, hidden),
+    // "?"를 눌렀을 때: 마우스를 올릴 수 없는 경우(키보드)를 위해 같은 설명을 알림으로 띄운다.
+    explain: text => $.ui.toast(text, { timeoutMs: HELP_TOAST_MS }),
     // 음량은 재생기를 켤 때 정해지므로, 켜져 있으면 새 음량으로 다시 켠다.
     setVolume: async level => {
       if (!isVolume(level)) return
