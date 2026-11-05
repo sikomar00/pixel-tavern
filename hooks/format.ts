@@ -32,6 +32,9 @@ export const fmtReset = (iso: string | undefined, now: number): string => {
   return `${minutes}m`
 }
 
+/** 리셋 시각이 이미 지났나. 지났다면 그 한도의 사용량은 옛 값이다(다음 응답이 올 때까지 갱신되지 않는다). */
+export const isPast = (iso: string | undefined, now: number): boolean => iso !== undefined && Date.parse(iso) <= now
+
 /** 자정이 지나면 값이 바뀌는 날짜 키(기기 시간대). */
 export const todayKey = (ms: number): string => {
   const d = new Date(ms)

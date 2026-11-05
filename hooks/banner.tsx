@@ -3,7 +3,7 @@ import type { Elements } from 'claude-code'
 import type { GitInfo, RadioState, Usage } from '../types'
 import type { Actions } from './actions'
 import { ART } from './art'
-import { fmtReset, fmtTokens, shortModel } from './format'
+import { fmtReset, fmtTokens, isPast, shortModel } from './format'
 import type { Scene } from './scenes'
 import { clipWidth, svgText, textWidth, WARN_COLOR, WARN_PERCENT } from './svg'
 
@@ -15,6 +15,7 @@ export type BannerData = {
   project: string
   now: number
   radio: RadioState
+  isMusicAvailable: boolean
 }
 
 type Gauge = { name: string; percent: number | null; sub: string }
@@ -34,7 +35,14 @@ export const gaugesOf = ({ scene, usage, now }: BannerData): Gauge[] => {
   const reset = (kind: string): string => {
     const found = limit(kind)
 
+    if (isPast(found?.resetsAt, now)) return '리셋됨' // 옛 사용량이라 %는 비운다
+
     return found?.resetsAt === undefined ? '' : `리셋 ${fmtReset(found.resetsAt, now)}`
+  }
+  const live = (kind: string): number | null => {
+    const found = limit(kind)
+
+    return found === undefined || isPast(found.resetsAt, now) ? null : found.percentUsed
   }
   const tokens = usage?.tokens ?? null
 
@@ -44,8 +52,8 @@ export const gaugesOf = ({ scene, usage, now }: BannerData): Gauge[] => {
       percent: usage?.percent ?? null,
       sub: tokens === null ? '' : `${fmtTokens(tokens)}/${fmtTokens(usage?.window ?? 0)}`,
     },
-    { name: scene.gauges.fiveHour, percent: limit('five_hour')?.percentUsed ?? null, sub: reset('five_hour') },
-    { name: scene.gauges.week, percent: limit('seven_day')?.percentUsed ?? null, sub: reset('seven_day') },
+    { name: scene.gauges.fiveHour, percent: live('five_hour'), sub: reset('five_hour') },
+    { name: scene.gauges.week, percent: live('seven_day'), sub: reset('seven_day') },
   ]
 }
 
@@ -72,6 +80,7 @@ const noteOf = ({ scene, radio }: BannerData): { text: string; color: string } =
   if (radio === 'playing') return { text: `♪ ${scene.music.label}`, color: scene.accent }
   if (radio === 'connecting') return { text: '♪ 연결 중…', color: scene.accent }
   if (radio === 'failed') return { text: '♪ 연결 실패 · ▶로 다시', color: WARN_COLOR }
+  if (radio === 'other') return { text: '♪ 다른 채팅에서 재생 중', color: scene.muted }
 
   return { text: scene.motto, color: scene.muted }
 }
@@ -101,7 +110,7 @@ export const bannerText = (d: BannerData): string => {
   return [d.scene.title, ...gauges, ...(d.git === null ? [] : [d.git.branch])].join(' · ')
 }
 
-export const RADIO_ICON: Record<RadioState, string> = { off: '▶', connecting: '…', playing: '■', failed: '▶' }
+export const RADIO_ICON: Record<RadioState, string> = { off: '▶', connecting: '…', playing: '■', failed: '▶', other: '▶' }
 
 type Ui = Elements['desktop']
 
@@ -130,7 +139,7 @@ export const bannerView = (ui: Ui, d: BannerData & { isHidden: boolean }, act: A
       <Svg source={bannerSvg(d)} alt={bannerText(d)} width={760} height={48} />
       <Box position="absolute" top={0} right={1} flexDirection="column">
         <Box flexDirection="row" gap={1}>
-          {musicButton(ui, d, act)}
+          {d.isMusicAvailable ? [musicButton(ui, d, act)] : []}
           <Button key="panel" plain label="▤" onPress={() => act.openPanel()} />
         </Box>
         <Box flexDirection="row" gap={1}>

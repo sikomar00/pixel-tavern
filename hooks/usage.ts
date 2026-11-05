@@ -1,5 +1,5 @@
 import type { Usage } from '../types'
-import { fmtReset, fmtTokens } from './format'
+import { fmtReset, fmtTokens, isPast } from './format'
 import type { Scene } from './scenes'
 import { clipWidth, svgText, WARN_COLOR, WARN_PERCENT } from './svg'
 import { TEXT_PRIMARY } from './theme'
@@ -16,7 +16,7 @@ const CENTER_Y = 50
 const NAME_WIDTH = 110 // 이름이 이웃 원 쪽으로 넘치지 않는 폭
 
 /** 기능 이름이 먼저, 테마 이름(장면마다 다름)은 그 아래 작게. 테마 이름만 보고 뜻을 짐작하게 하지 않는다. */
-type Gauge = { name: string; theme: string; percent: number | null; sub: string }
+type Gauge = { name: string; theme: string; percent: number | null; sub: string; isStale?: boolean }
 
 const themeOf = (name: string): string => name.split(' · ')[0] ?? name
 
@@ -29,6 +29,14 @@ const gaugesOf = (scene: Scene, usage: Usage | null, now: number): Gauge[] => {
 
     return found.resetsAt === undefined ? '리셋 정보 없음' : `${fmtReset(found.resetsAt, now)} 뒤 리셋`
   }
+  // 리셋 시각이 지난 한도: 사용량은 옛 값이라 보이지 않고, 다음 응답이 와야 갱신된다.
+  const limitGauge = (kind: string, name: string, theme: string): Gauge => {
+    const found = limit(kind)
+
+    if (found !== undefined && isPast(found.resetsAt, now)) return { name, theme, percent: null, sub: '응답 후 갱신', isStale: true }
+
+    return { name, theme, percent: found?.percentUsed ?? null, sub: reset(kind) }
+  }
   const tokens = usage?.tokens ?? null
 
   return [
@@ -38,8 +46,8 @@ const gaugesOf = (scene: Scene, usage: Usage | null, now: number): Gauge[] => {
       percent: usage?.percent ?? null,
       sub: tokens === null ? '' : `${fmtTokens(tokens)}/${fmtTokens(usage?.window ?? 0)}`,
     },
-    { name: '5시간 한도', theme: themeOf(scene.gauges.fiveHour), percent: limit('five_hour')?.percentUsed ?? null, sub: reset('five_hour') },
-    { name: '주간 한도', theme: themeOf(scene.gauges.week), percent: limit('seven_day')?.percentUsed ?? null, sub: reset('seven_day') },
+    limitGauge('five_hour', '5시간 한도', themeOf(scene.gauges.fiveHour)),
+    limitGauge('seven_day', '주간 한도', themeOf(scene.gauges.week)),
   ]
 }
 
@@ -87,7 +95,9 @@ const gaugeSvg = (g: Gauge, index: number, scene: Scene): string => {
 
   return (
     ring(cx, percent, color) +
-    svgText(cx, CENTER_Y + 6, hasValue ? `${Math.round(percent)}%` : '-', 19, color, 700, 'middle') +
+    (g.isStale === true
+      ? svgText(cx, CENTER_Y + 5, '리셋됨', 14, scene.muted, 700, 'middle')
+      : svgText(cx, CENTER_Y + 6, hasValue ? `${Math.round(percent)}%` : '-', 19, color, 700, 'middle')) +
     (hasValue ? svgText(cx, CENTER_Y + 20, '사용', 11, scene.muted, 400, 'middle') : '') +
     svgText(cx, 108, clipWidth(g.name, 14, NAME_WIDTH), 14, TEXT_PRIMARY, 600, 'middle') +
     svgText(cx, 124, clipWidth(g.theme, 11.5, NAME_WIDTH), 11.5, scene.muted, 400, 'middle') +
