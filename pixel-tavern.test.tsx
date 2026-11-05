@@ -37,6 +37,13 @@ const USAGE = {
 const GIT_STATUS = '## main...origin/main [ahead 1, behind 2]\n M a.ts\n?? b.ts\n'
 const GIT_LOG = 'abc1234\tfeat: 배너 추가\ndef5678\tfix: 한도 표시'
 
+/** 숫자 칸: 숫자 글자가 라벨 글자 바로 앞에 놓인다. */
+const counter = async (ui: { findAll: (q: object) => Promise<{ text?: string }[]> }, label: string) => {
+  const texts = (await ui.findAll({ type: 'Text' })).map(node => node.text)
+
+  return texts[texts.indexOf(label) - 1]
+}
+
 /** 엔진이 받쳐 주는 호출을 흉내 낸다. 시계와 저장소는 키트가 메모리로 답한다. */
 type Spy = { ran: string[]; filled: string[]; toasts: string[] }
 type GitFake = { status: string }
@@ -191,9 +198,11 @@ test('패널: 장면을 고르면 바뀌고, 한도·프로젝트·최근 커밋
 
   expect(await sources()).toHaveLength(2)
   expect((await sources())[0]).toContain('비 오는 밤 다락방')
-  expect((await sources())[1]).toContain('23.5%')
+  expect((await sources())[1]).toContain('24% 사용')
   expect((await sources())[1]).toContain('1h 37m 뒤 리셋')
   expect((await ui.find({ type: 'Text', text: /abc1234/ }))?.text).toContain('배너 추가')
+  expect(await ui.find({ type: 'Text', text: /변경 2개/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /올릴 커밋 1/ }))?.text).toBe('올릴 커밋 1 · 받을 커밋 2')
   await ui.select({ key: 'mode', value: 'adventure' })
   expect((await sources())[0]).toContain('8비트 던전')
   await ui.select({ key: 'scene', value: 'neon' })
@@ -213,8 +222,8 @@ test('오늘 통계와 이 채팅의 파일: Edit·Write만 기록하고, 누르
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect((await ui.find({ type: 'Text', text: /도구 실행/ }))?.text).toBe('도구 실행 4')
-  expect((await ui.find({ type: 'Text', text: /건드린 파일/ }))?.text).toBe('건드린 파일 2')
+  expect(await counter(ui, '도구 실행')).toBe('4')
+  expect(await counter(ui, '수정 파일')).toBe('2')
   const files = (await ui.findAll({ type: 'Button' })).filter(button => button.key?.startsWith('file:'))
 
   expect(files.map(button => button.props.label)).toEqual(['p/b.ts', 'p/a.ts']) // 최근 것이 위, 폴더 이름을 붙여 구분
@@ -231,10 +240,10 @@ test('어제의 통계는 0으로 보이고, 오늘 첫 기록부터 새로 센�
   await clock.settle()
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect((await ui.find({ type: 'Text', text: /도구 실행/ }))?.text).toBe('도구 실행 0')
-  expect((await ui.find({ type: 'Text', text: /건드린 파일/ }))?.text).toBe('건드린 파일 0')
+  expect(await counter(ui, '도구 실행')).toBe('0')
+  expect(await counter(ui, '수정 파일')).toBe('0')
   await $.tool.call({ tool: 'Bash', command: 'ls' })
-  expect((await ui.find({ type: 'Text', text: /도구 실행/ }))?.text).toBe('도구 실행 1')
+  expect(await counter(ui, '도구 실행')).toBe('1')
   await ui.unmount()
 })
 
@@ -288,7 +297,7 @@ test('음악: ▶는 이 장면의 방송을 켜고 ■는 끈다. 장면을 바
   expect(await icon()).toBe('■')
   expect(String((await banner.find({ type: 'Svg' }))?.props.source)).toContain(`♪ ${SCENES.attic.music.label}`)
   expect(await paneButtons()).toContain('■ 정지')
-  expect((await pane.find({ type: 'Text', text: /재생 중/ }))?.text).toContain('24시간')
+  expect(await pane.find({ type: 'Text', text: /● 재생 중/ })).toBeDefined()
   expect(urls).toEqual([SCENES.attic.music.stream])
   await banner.press({ key: 'shuffle' })
   expect(urls).toEqual([SCENES.attic.music.stream, SCENES.tearoom.music.stream])
