@@ -1,6 +1,6 @@
 # 보안·코드 품질 점검
 
-기준: 커밋 `bec0ab0` + 바뀐 파일 목록(커밋 전). 작성일 2026-11-05. 코드를 읽고 검색해서 확인했고, 재생기는 실제 Windows에서 소리 없이 돌려 보았습니다.
+기준: 커밋 `1758ae5` + 빠른 실행 진행 상태(커밋 전). 작성일 2026-11-05. 코드를 읽고 검색해서 확인했고, 재생기는 실제 Windows에서 소리 없이 돌려 보았습니다.
 **[확인]** 코드·실행으로 확인 · **[시험]** 자동 시험 · **[미검증]** 확인하지 못함
 
 ## 1. 바깥에서 들어오는 입력은 매우 적다
@@ -14,6 +14,7 @@
 | 슬래시 명령 | `QUICK` 상수(`/code-review`, `/commit-commands:commit`, `/simplify`) | `$.command.run` | 고정 |
 | **파일 경로** | 모델의 `Edit/Write/NotebookEdit` 호출 인자(`file_path`) | 패널 버튼 이름, 클릭하면 프롬프트에 `@경로` 채움 | **제어 문자 문제를 찾아 고침(F-04)** |
 | git 출력 | 사용자 폴더의 `git status/log` | 패널에 글자로 표시 | 글자로만 쓰임 |
+| 턴 시작·끝 이벤트 | 엔진(`turn.start`, `turn.complete`) | 상태 값 `work`(눌린 버튼·턴 번호·끝난 이유·걸린 초) | **모델의 답(`answer`)과 프롬프트 글(`text`)은 읽지도 저장하지도 않음**. 서브에이전트의 턴은 건너뜀. 저장소에는 쓰지 않음 |
 
 ## 2. 점검 항목별 결과
 
@@ -43,7 +44,7 @@
 
 **타입 안전 [미검증]** 타입 정의(`types/index.d.ts`)와 `tsconfig.json`은 있으나, 이 환경에 `tsc`가 없어 검사를 돌리지 못했습니다. 대신 `claude plugin validate`(상태 키가 계약과 맞는지)와 자동 시험 78개로 갈음했습니다.
 
-**모듈 의존 [확인]** `register → (actions, alerts, banner, panel, radio …)`, `panel → (layout, music, gitrows, usage, diag …)`, `state → (git, scenes, format, volume)`, `radio → (state, scenes, volume)`. 실행 시점 순환은 없습니다. 타입만 서로 가리키는 곳이 둘 있습니다(`layout`·`music` → `panel`의 `PanelData`, `panel` → `banner`의 `BannerData`). 바깥 세계(git·재생기)는 각각 `git.ts`, `radio.ts` 한 파일에 모여 있습니다.
+**모듈 의존 [확인]** `register → (actions, alerts, banner, panel, radio …)`, `panel → (layout, music, gitrows, quick, usage, diag …)`, `state → (git, scenes, format, volume)`, `radio → (state, scenes, volume)`. 실행 시점 순환은 없습니다. 타입만 서로 가리키는 곳이 둘 있습니다(`layout`·`music` → `panel`의 `PanelData`, `panel` → `banner`의 `BannerData`). 바깥 세계(git·재생기)는 각각 `git.ts`, `radio.ts` 한 파일에 모여 있습니다.
 
 **OS 호환 [시험]** 음악만 Windows 전용입니다. `where.exe powershell.exe`로 확인해 없으면 음악 버튼이 사라집니다. 나머지(배너·패널·git·사용량)는 OS와 무관합니다. 다른 OS는 [미검증].
 
