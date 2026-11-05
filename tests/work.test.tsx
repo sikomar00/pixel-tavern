@@ -1,14 +1,15 @@
 // [진행] 시험: 빠른 실행 버튼의 진행 상태(대기 → 진행 중 → 끝·중단·실패)가 턴 이벤트를 따라가는지.
 // 실제 엔진에서 명령 호출과 턴 시작·끝의 순서는 확인하지 못했다(docs/review/remaining-issues.md R-20): 시험은 가짜 엔진이 보내는 순서만 본다.
 import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import { WARN_COLOR } from '../hooks/svg'
-import { PANE, START, world } from './kit'
+import { PANE, START, newSpy, world } from './kit'
 
 const begin = (turnId: string) => ({ text: '', turnId })
 
 const finish = (turnId: string, durationMs = 42_000) => ({ answer: '', durationMs, isAborted: false, turnId, reason: 'answer' as const })
 
-const mountPane = async ($: Parameters<Parameters<typeof test>[1]>[0], clock: { settle: () => Promise<void> }) => {
+const mountPane = async ($: Engine, clock: { settle: () => Promise<void> }) => {
   await $.session.start(START)
   await clock.settle()
 
@@ -106,7 +107,7 @@ test('[진행] 다시 누르면 새 대기로 바뀌고, 옛 타이머가 새 �
 })
 
 test('[진행] 명령을 실행하지 못하면 진행 표시를 남기지 않고 알려 준다', async ($, on) => {
-  const spy = { ran: [], filled: [], toasts: [], runs: [] }
+  const spy = newSpy()
   const clock = world(on, { runFails: true, spy })
   const pane = await mountPane($, clock)
 

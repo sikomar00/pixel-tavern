@@ -1,4 +1,5 @@
 // 시험 도우미: 가짜 엔진(world), 재생기 흉내, 숫자 읽기, 색 대비 계산. 시험 파일들이 함께 쓴다(시험이 아니라서 *.test.* 가 아니다).
+import type { ToolCallResult } from 'claude-code'
 import { mock } from 'claude-code/testing'
 import { QUICK } from '../hooks/actions'
 
@@ -73,7 +74,7 @@ export const toPorcelainZ = (text: string): string =>
  */
 export type StoreHooks = { afterGet?: (key: string) => void | Promise<void>; setDelayMs?: (key: string, nth: number) => number }
 
-export type World = { now?: number; storeHooks?: StoreHooks; runDelaysMs?: number[]; runFails?: boolean; spy?: Spy; stored?: object; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
+export type World = { now?: number; storeHooks?: StoreHooks; runDelaysMs?: number[]; runFails?: boolean; spy?: Spy; stored?: Record<string, unknown>; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
 
 /** 저장소에 남은 그날의 칸(today:<날짜>:<칸 이름>)들의 값. 합계 키(today)는 옛 방식이라 들어 있지 않다. */
 export const slotsOf = (store: Record<string, unknown>, day: string): { date: string; prompts: number; actions: number; files: string[] }[] =>
@@ -165,7 +166,7 @@ export const world = (
       },
     }
   })
-  on('tool.call', () => tool.value)
+  on('tool.call', () => tool.value as ToolCallResult)
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
 

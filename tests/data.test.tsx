@@ -110,7 +110,7 @@ test('[데이터] 경고 기준은 배너와 패널이 같다', async () => {
   const hot = { limits: [{ kind: 'five_hour', percentUsed: 85 }] } as never
   const cool = { limits: [{ kind: 'five_hour', percentUsed: 84 }] } as never
   const banner = (usage: never) =>
-    bannerSvg({ scene: SCENES.attic, usage, git: null, model: null, project: 'p', now: NOON, radio: 'off' })
+    bannerSvg({ scene: SCENES.attic, usage, git: null, model: null, project: 'p', now: NOON, radio: 'off', isMusicAvailable: true, isStill: false })
 
   expect(usageSvg(SCENES.attic, hot, NOON)).toContain(WARN_COLOR)
   expect(banner(hot)).toContain(WARN_COLOR)
@@ -155,7 +155,7 @@ test('[데이터] 사용량 0·3·45·100%와 초과 상태에서 숫자와 원�
   // 주간 한도가 없는 원은 0%처럼 보이지 않고 "정보 없음"이라고 쓴다.
   expect(at(SCENES.attic, 45)).toContain('>정보 없음<')
   // 배너도 같은 반올림을 쓴다.
-  const banner = bannerSvg({ scene: SCENES.attic, usage: { limits: [{ kind: 'five_hour', percentUsed: 44.6 }] } as never, git: null, model: null, project: 'p', now: NOON, radio: 'off' })
+  const banner = bannerSvg({ scene: SCENES.attic, usage: { limits: [{ kind: 'five_hour', percentUsed: 44.6 }] } as never, git: null, model: null, project: 'p', now: NOON, radio: 'off', isMusicAvailable: true, isStill: false })
 
   expect(banner).toContain('>45%<')
 })

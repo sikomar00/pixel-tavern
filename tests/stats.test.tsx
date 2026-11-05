@@ -1,6 +1,7 @@
 // [통계] 시험: 오늘 통계가 여러 채팅이 겹쳐 쓰는 상황에서도 정확한지(채팅마다 자기 칸에 쓰고 합계는 칸들의 합).
 // 옛 방식(모두가 today 키 하나를 읽고-고치고-쓰기)은 10에서 두 채팅이 1씩 늘리면 11이 됐다 — 실제로 재현했다(docs/review 참고).
 import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import { fingerprint } from '../hooks/format'
 import { byProject, withFile } from '../hooks/stats'
 import { PANE, START, counter, slotsOf, world } from './kit'
@@ -13,7 +14,7 @@ const slot = (prompts: number, actions: number, files: string[] = []) => ({ date
 
 const total = (store: Record<string, unknown>, field: 'prompts' | 'actions'): number => slotsOf(store, DAY).reduce((sum, item) => sum + item[field], 0)
 
-const mount = async ($: Parameters<Parameters<typeof test>[1]>[0], clock: { settle: () => Promise<void> }) => {
+const mount = async ($: Engine, clock: { settle: () => Promise<void> }) => {
   await $.session.start(START)
   await clock.settle()
 
@@ -305,5 +306,33 @@ test('[프로젝트별] 다른 채팅들이 11개 프로젝트에서 일했어�
   const all = await texts(pane)
 
   expect(all[all.lastIndexOf('p') + 1]).toBe('프롬프트 0 · 도구 6 · 파일 0') // 합쳐서 6(이 채팅 몫 5만 보이면 틀린 것)
+  await pane.unmount()
+})
+
+test('[통계] 거부되거나 실패한 Edit·Write·NotebookEdit는 고친 파일로 기록하지 않고, 끝까지 간 호출만 기록한다', async ($, on) => {
+  const tool = { value: { result: {} } as object }
+  const clock = world(on, { tool })
+  const pane = await mount($, clock)
+  const edit = { tool: 'Edit', file_path: 'C:/work/p/a.ts', old_string: 'a', new_string: 'b' } as const
+  const write = { tool: 'Write', file_path: 'C:/work/p/b.ts', content: 'x' } as const
+  const notebook = { tool: 'NotebookEdit', notebook_path: 'C:/work/p/n.ipynb', new_source: 'x' } as never
+  const files = async () => (await pane.findAll({ type: 'Button' })).filter(button => button.key?.startsWith('file:')).length
+
+  tool.value = { result: {}, isError: true } // 실패한 호출
+  await $.tool.call(edit)
+  await $.tool.call(write)
+  await $.tool.call(notebook)
+  tool.value = { deny: '막힘' } // 거부된 호출
+  await $.tool.call(edit)
+  await $.tool.call(write)
+  await $.tool.call(notebook)
+  expect(await counter(pane, '수정 파일')).toBe('0')
+  expect(await files()).toBe(0)
+  tool.value = { result: {} } // 끝까지 간 호출
+  await $.tool.call(edit)
+  await $.tool.call(write)
+  await $.tool.call(notebook)
+  expect(await counter(pane, '수정 파일')).toBe('3')
+  expect(await files()).toBe(3)
   await pane.unmount()
 })

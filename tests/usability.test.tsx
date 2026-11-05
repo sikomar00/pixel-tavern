@@ -4,6 +4,9 @@ import { QUICK } from '../hooks/actions'
 import { HELP } from '../hooks/help'
 import { ARMED_LABEL, BAND, PANE, START, USAGE, counter, fakePlayer, newSpy, world } from './kit'
 
+// 엔진이 명령에 붙여 주는 입력(/tavern-diag를 사람이 입력한 것). 시험은 엔진 역할이라 모든 필드를 적는다.
+const DIAG_COMMAND = { command: 'tavern-diag', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } } as const
+
 test('[사용성] 배너를 숨겨도 음악이 켜져 있으면 끄는 버튼은 남는다', async ($, on) => {
   const clock = world(on)
 
@@ -160,7 +163,7 @@ test('[사용성] /tavern-diag: 측정판이 켜지고 꺼지며, 열·줄 수�
 
   expect(await board()).toBeUndefined() // 평소에는 보이지 않는다
   expect(await rulers()).toHaveLength(0)
-  const on1 = await $.command.run({ command: 'tavern-diag' })
+  const on1 = await $.command.run(DIAG_COMMAND)
 
   expect(String((on1 as { text?: string }).text)).toContain('측정판을 켰어요')
   expect(await board()).toBeDefined()
@@ -170,7 +173,7 @@ test('[사용성] /tavern-diag: 측정판이 켜지고 꺼지며, 열·줄 수�
   for (const step of ['xs', 'sm', 'md', 'lg', 'xl']) expect(await pane.find({ type: 'Text', text: new RegExp(`^${step}$`) })).toBeDefined()
   for (const size of ['caption', 'footnote', 'body', 'heading', 'title']) expect(await pane.find({ type: 'Text', text: new RegExp(`^${size} 가나다`) })).toBeDefined()
   expect(await pane.find({ key: 'quick' })).toBeUndefined() // 측정판의 버튼이 진짜 기능 버튼과 섞이지 않는다
-  const off = await $.command.run({ command: 'tavern-diag' })
+  const off = await $.command.run(DIAG_COMMAND)
 
   expect(String((off as { text?: string }).text)).toContain('껐어요')
   expect(await board()).toBeUndefined()
