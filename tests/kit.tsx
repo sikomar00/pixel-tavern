@@ -141,3 +141,6 @@ export const contrast = (a: string, b: string): number => {
 
   return (hi + 0.05) / (lo + 0.05)
 }
+
+/** 예전에 장면마다 있던 비유 이름. 이제 화면 어디에도 없어야 한다. */
+export const METAPHOR_NAMES = ['촛불', '찻잔', '마나', '전기', '오늘의 의뢰', '길드 장부', '신청곡', '단골 장부', '스테이지', '시즌', '공연', '투어']

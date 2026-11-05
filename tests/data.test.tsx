@@ -10,7 +10,7 @@ import { mergeToday } from '../hooks/state'
 import { filledSegments as segmentsFor, usageSummary, usageSvg } from '../hooks/usage'
 import { MODES, SCENES } from '../hooks/scenes'
 import { WARN_COLOR } from '../hooks/svg'
-import { ARMED_LABEL, BAND, GIT_LOG, GIT_STATUS, NOON, PANE, START, USAGE, counter, filledSegments, newSpy, world } from './kit'
+import { ARMED_LABEL, BAND, GIT_LOG, GIT_STATUS, METAPHOR_NAMES, NOON, PANE, START, USAGE, counter, filledSegments, newSpy, world } from './kit'
 
 test('[데이터] 순수 도우미: 시간·모델·파일 주소·git 출력 읽기', async () => {
   const now = Date.parse('2026-11-04T10:00:00Z')
@@ -39,14 +39,14 @@ test('[데이터] 장면 그림과 장면 데이터가 어긋나지 않는다', 
     const art = ART[id]
     const svg = composeScene(art, 42)
 
-    expect(art.labelName, `${id} 게이지 이름`).toBe(scene.gauges.context)
-    expect(svg).toContain(`${scene.gauges.context} 42%`)
+    expect(art.labelName, `${id} 게이지 이름`).toBe('컨텍스트')
+    expect(svg).toContain('컨텍스트 42%')
     expect(svg).toContain('viewBox="0 0 85 74"') // 그림이 끝나는 줄에서 자른다
     expect(svg).not.toContain(scene.title) // 제목·모토 블록은 그리지 않는다(장면 선택 칸과 배너에 있다)
     expect(svg).not.toContain(scene.motto)
     expect(art.gauges).toHaveLength(21)
     expect(svg.length).toBeLessThan(131072)
-    expect(composeScene(art, null)).toContain(`${scene.gauges.context} -`)
+    expect(composeScene(art, null)).toContain('컨텍스트 -')
     expect(art.base).toBe(scene.base)
   }
 })
@@ -147,9 +147,9 @@ test('[데이터] 사용량 0·3·45·100%와 초과 상태에서 숫자와 원�
       expect(svg, `${scene.id} ${percent}% 숫자`).toContain(`>${percent}%<`)
       expect(filledSegments(svg), `${scene.id} ${percent}% 원`).toBe(filled)
     }
-    // 기능 이름이 먼저, 테마 이름은 그 아래. 리셋까지 남은 시간도 문구로 알린다.
+    // 기능 이름만 쓴다(장면별 비유 이름은 없다). 리셋까지 남은 시간도 문구로 알린다.
     expect(at(scene, 45), scene.id).toContain('>5시간 한도<')
-    expect(at(scene, 45), scene.id).toContain(`>${scene.gauges.fiveHour.split(' · ')[0]}<`)
+    for (const old of METAPHOR_NAMES) expect(at(scene, 45), `${scene.id} ${old}`).not.toContain(`>${old}<`)
     expect(at(scene, 45), scene.id).toContain('1h 37m 뒤 리셋')
   }
   // 주간 한도가 없는 원은 0%처럼 보이지 않고 "정보 없음"이라고 쓴다.
@@ -223,7 +223,7 @@ test('[데이터] 사용량 원: 컨텍스트·5시간·주간 3개가 한 줄�
   expect(at('>컨텍스트<')).toBeGreaterThan(-1)
   expect(at('>컨텍스트<')).toBeLessThan(at('>5시간 한도<'))
   expect(at('>5시간 한도<')).toBeLessThan(at('>주간 한도<'))
-  for (const theme of ['촛불', '오늘의 의뢰', '길드 장부']) expect(svg).toContain(`>${theme}<`) // 테마 이름은 보조로 함께
+  for (const old of METAPHOR_NAMES) expect(svg).not.toContain(`>${old}<`) // 비유 이름은 없다
   expect(svg).toContain('>84k/200k<')
   expect(svg).toContain('>1h 37m 뒤 리셋<')
   expect(svg).toContain('>2d 3h 뒤 리셋<')

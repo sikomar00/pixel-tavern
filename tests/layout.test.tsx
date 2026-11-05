@@ -1,11 +1,11 @@
 // [레이아웃] 시험. 공용 도우미는 ./kit.tsx 에 있다.
 import { expect, test } from 'claude-code/testing'
 import { bannerSvg } from '../hooks/banner'
-import { usageSvg, usageWidthFor } from '../hooks/usage'
+import { USAGE_HEIGHT, usageSvg, usageWidthFor } from '../hooks/usage'
 import { SCENES } from '../hooks/scenes'
 import { WARN_COLOR, clipWidth } from '../hooks/svg'
 import { TEXT_PRIMARY, chipOf, lift, surfaceOf } from '../hooks/theme'
-import { BAND, NOON, PANE, START, contrast, luminance, world } from './kit'
+import { BAND, METAPHOR_NAMES, NOON, PANE, START, contrast, luminance, world } from './kit'
 
 test('[레이아웃] 터미널에서는 글자 한 줄 띠로 대신한다', async ($, on) => {
   const clock = world(on)
@@ -15,7 +15,7 @@ test('[레이아웃] 터미널에서는 글자 한 줄 띠로 대신한다', asy
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
-  expect((await ui.find({ type: 'Text', text: /촛불/ }))?.text).toContain('main')
+  expect((await ui.find({ type: 'Text', text: /컨텍스트/ }))?.text).toContain('main')
   expect((await ui.find({ type: 'Button' }))?.props.label).toBe('▶')
   await ui.unmount()
 })
@@ -26,7 +26,7 @@ test('[레이아웃] 글자 폭 자르기: 한글은 넓게, 영문은 좁게 �
   expect(clipWidth('abcdefghij', 3, 10)).toBe('abcd…')
 })
 
-test('[레이아웃] 배너 게이지: 100%여도 이름이 퍼센트와 겹치지 않게 자른다', async () => {
+test('[레이아웃] 배너 게이지: 100%여도 기능 이름이 그대로 보이고 비유 이름은 없다', async () => {
   const at = (percentUsed: number) =>
     bannerSvg({
       scene: SCENES.attic,
@@ -38,8 +38,10 @@ test('[레이아웃] 배너 게이지: 100%여도 이름이 퍼센트와 겹치�
       radio: 'off',
     })
 
-  expect(at(3)).toContain('>오늘의 의뢰<')
-  expect(at(100)).not.toContain('>오늘의 의뢰<')
+  for (const percent of [3, 100]) {
+    for (const name of ['컨텍스트', '5시간', '주간']) expect(at(percent), `${percent}% ${name}`).toContain(`>${name}<`)
+    for (const old of METAPHOR_NAMES) expect(at(percent)).not.toContain(`>${old}<`)
+  }
 })
 
 test('[레이아웃] 4개 장면의 글자색 대비가 4.5 이상이다', async () => {
@@ -158,9 +160,8 @@ for (const id of ['attic', 'tearoom', 'dungeon', 'neon'] as const) {
     expect(String(svgs[0]?.props.alt)).toContain(SCENES[id].title)
     expect(svgs[0]?.props.height).toBe(296)
     expect(String(svgs[1]?.props.source)).toContain('>컨텍스트<')
-    for (const name of [SCENES[id].gauges.context, SCENES[id].gauges.fiveHour, SCENES[id].gauges.week]) {
-      expect(String(svgs[1]?.props.source), `${id} ${name}`).toContain(`>${name.split(' · ')[0]}<`)
-    }
+    for (const name of ['컨텍스트', '5시간 한도', '주간 한도']) expect(String(svgs[1]?.props.source), `${id} ${name}`).toContain(`>${name}<`)
+    for (const old of METAPHOR_NAMES) expect(String(svgs[1]?.props.source), `${id} ${old}`).not.toContain(`>${old}<`)
     expect((await pane.find({ type: 'Text', text: SCENES[id].music.label }))?.text).toBe(SCENES[id].music.label)
     await pane.unmount()
   })
@@ -172,9 +173,9 @@ test('[레이아웃] 사용량 그림 폭은 패널 열 수에 맞추되 기본(
   expect(usageWidthFor(200)).toBe(480)
   const wide = usageSvg(SCENES.attic, null, NOON, 387)
 
-  expect(wide).toContain('viewBox="0 0 387 152"')
+  expect(wide).toContain(`viewBox="0 0 387 ${USAGE_HEIGHT}"`)
   expect(wide).toContain('width="387"')
-  expect(usageSvg(SCENES.attic, null, NOON)).toContain('viewBox="0 0 340 152"') // 폭을 안 주면 예전과 같다
+  expect(usageSvg(SCENES.attic, null, NOON)).toContain(`viewBox="0 0 340 ${USAGE_HEIGHT}"`) // 폭을 안 주면 예전과 같다
   // 세 원이 넓어진 폭을 고르게 나눠 쓴다(가운데 원은 한가운데).
   expect(wide).toContain('x="193.5"')
 })
@@ -188,7 +189,7 @@ test('[레이아웃] 패널 열이 51이면 사용량 그림을 387px로 그리�
   const svgs = await pane.findAll({ type: 'Svg' })
 
   expect(svgs[1]?.props.width).toBe(387)
-  expect(String(svgs[1]?.props.source)).toContain('viewBox="0 0 387 152"')
+  expect(String(svgs[1]?.props.source)).toContain(`viewBox="0 0 387 ${USAGE_HEIGHT}"`)
   expect(svgs[0]?.props.width).toBe(340) // 그림(픽셀 아트)은 4배 그대로: 선명도를 지킨다
   const texts = await pane.findAll({ type: 'Text' })
   const index = texts.findIndex(node => node.text === '프롬프트')
