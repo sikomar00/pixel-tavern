@@ -1,0 +1,141 @@
+"""실제 Windows에서 재생기 스크립트(hooks/radio.ts 의 PLAYER)를 소리 없이(음량 0) 돌려 보는 점검. 표준 라이브러리만 쓴다.
+
+  python tools/player_check.py normal   정상 방송: 'playing'까지 걸리는 시간, CPU, 메모리, 끈 뒤 남는 재생기 (약 30초)
+  python tools/player_check.py dead     죽은 주소: 5번 다시 연결해 보고 'gaveup' 뒤 스스로 끝나는지 (약 100초)
+  python tools/player_check.py orphan   부모(엔진 역할) 프로세스를 강제로 죽이면 재생기가 스스로 끝나는지 (약 40초)
+
+주의: 재생기는 시작할 때 이미 켜져 있던 다른 재생기를 끈다(설계). 이 점검을 돌리면 지금 듣고 있는 음악도 꺼진다.
+"""
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+NO_WINDOW = 0x08000000
+STREAM = 'http://listen.reyfm.de/lofi_320kbps.mp3'  # hooks/scenes.ts 의 방송 주소 하나
+DEAD_URL = 'http://127.0.0.1:9/'
+
+
+def player_script() -> str:
+    """radio.ts 에서 PLAYER 문자열을 꺼내 ${MARKER}, ${MAX_TRIES} 를 값으로 바꾼다."""
+    src = (ROOT / 'hooks' / 'radio.ts').read_text(encoding='utf-8')
+    body = src.split('export const PLAYER = `', 1)[1].split('\n`', 1)[0]
+    marker = re.search(r"const MARKER = '([^']+)'", src).group(1)  # type: ignore[union-attr]
+    tries = re.search(r'const MAX_TRIES = (\d+)', src).group(1)  # type: ignore[union-attr]
+
+    return body.replace('${MARKER}', marker).replace('${MAX_TRIES}', tries)
+
+
+def ps(command: str) -> str:
+    return subprocess.run(['powershell.exe', '-NoProfile', '-Command', command], capture_output=True, text=True, creationflags=NO_WINDOW).stdout.strip()
+
+
+# 대괄호로 "radio"를 쪼개 둔다: 이 조회 명령 자신의 명령줄은 패턴에 걸리지 않는다.
+PLAYERS = "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -like '*pixel-tavern-radi[o]*' }"
+
+
+def count_players() -> int:
+    return int(ps(f'@({PLAYERS}).Count') or 0)
+
+
+def stop_players() -> None:
+    ps(f'{PLAYERS} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}')
+
+
+def usage_of(pid: int) -> str:
+    return ps(f"$p = Get-Process -Id {pid} -ErrorAction SilentlyContinue; if ($p) {{ '{{0:N1}}초 CPU, {{1:N0}} MB' -f $p.CPU, ($p.WorkingSet64/1MB) }} else {{ '없음' }}")
+
+
+def start(url: str) -> subprocess.Popen:
+    env = dict(os.environ, TAVERN_URL=url, TAVERN_VOLUME='0')
+    argv = ['powershell.exe', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', player_script()]
+
+    return subprocess.Popen(argv, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', creationflags=NO_WINDOW)
+
+
+def collect(proc: subprocess.Popen) -> list[tuple[float, str]]:
+    """표준 출력 줄을 (경과 초, 내용)으로 계속 모은다."""
+    lines: list[tuple[float, str]] = []
+    t0 = time.time()
+
+    def pump() -> None:
+        for line in proc.stdout:  # type: ignore[union-attr]
+            lines.append((time.time() - t0, line.strip()))
+
+    threading.Thread(target=pump, daemon=True).start()
+
+    return lines
+
+
+def normal() -> None:
+    proc = start(STREAM)
+    lines = collect(proc)
+
+    time.sleep(14)
+    first = next((t for t, text in lines if text == 'playing'), None)
+    early = usage_of(proc.pid)
+    time.sleep(10)
+    print('정상 방송: playing 까지 ' + (f'{first:.1f}초' if first else '신호 없음'))
+    print(f'자원(14초 / 24초 시점): {early} / {usage_of(proc.pid)}')
+    proc.kill()
+    proc.wait()
+    time.sleep(1)
+    print(f'끈 뒤 남은 재생기: {count_players()}개')
+
+
+def dead() -> None:
+    proc = start(DEAD_URL)
+    lines = collect(proc)
+    t0 = time.time()
+
+    while proc.poll() is None and time.time() - t0 < 110:
+        time.sleep(1)
+    print('죽은 주소: connecting 시각(초) ' + str([round(t) for t, text in lines if text == 'connecting']))
+    print('gaveup 시각(초) ' + str([round(t) for t, text in lines if text == 'gaveup']))
+    print('끝났나: ' + ('아직 살아 있음' if proc.poll() is None else f'예(종료 코드 {proc.poll()})'))
+    proc.kill()
+
+
+def parent() -> None:
+    """엔진 역할: 재생기를 자식으로 띄워 두고 기다린다. 점검이 이 프로세스를 강제로 죽인다."""
+    start(STREAM)
+    time.sleep(120)
+
+
+def orphan() -> None:
+    helper = subprocess.Popen([sys.executable, __file__, '--parent'], creationflags=NO_WINDOW)
+
+    time.sleep(9)  # 재생기가 시작 5초 뒤 부모 감시를 켤 시간
+    before = count_players()
+    subprocess.run(['taskkill', '/F', '/PID', str(helper.pid)], capture_output=True, creationflags=NO_WINDOW)
+    t0 = time.time()
+
+    while time.time() - t0 < 30 and count_players() > 0:
+        time.sleep(1)
+    left = count_players()
+    print(f'부모를 죽이기 전 재생기: {before}개')
+    print('부모를 죽인 뒤: ' + (f'{time.time() - t0:.1f}초 만에 모두 끝남' if left == 0 else f'30초가 지나도 {left}개가 남음(고아)'))
+
+
+def main() -> None:
+    if sys.argv[1:] == ['--parent']:
+        return parent()
+    choice = {'normal': normal, 'dead': dead, 'orphan': orphan}.get(sys.argv[1] if len(sys.argv) > 1 else '')
+
+    if choice is None:
+        sys.exit(__doc__)
+    stop_players()
+    try:
+        choice()
+    finally:
+        stop_players()
+        print(f'정리 후 남은 재생기: {count_players()}개')
+
+
+if __name__ == '__main__':
+    main()
