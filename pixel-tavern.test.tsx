@@ -7,6 +7,7 @@ import { bannerSvg } from './hooks/banner'
 import { QUICK } from './hooks/actions'
 import { HELP } from './hooks/help'
 import { NO_ALERTS, checkAlerts } from './hooks/alerts'
+import { mergeToday } from './hooks/state'
 import { filledSegments as segmentsFor, usageSummary, usageSvg, usageWidthFor } from './hooks/usage'
 import { MODES, SCENES } from './hooks/scenes'
 import { WARN_COLOR, clipWidth } from './hooks/svg'
@@ -727,6 +728,7 @@ test('[레이아웃] 카드·칩 배경은 바탕보다 밝고, 그 위 글자 �
       // 강조색은 카드 위에서는 글자(4.5), 칩 위에서는 점(3)으로만 쓴다.
       expect(contrast(scene.accent, bg), `${scene.id} ${name} 위 강조색`).toBeGreaterThanOrEqual(name === '카드' ? 4.5 : 3)
       expect(contrast(TEXT_PRIMARY, bg), `${scene.id} ${name} 위 밝은 글자`).toBeGreaterThanOrEqual(7)
+      if (name === '카드') expect(contrast(WARN_COLOR, bg), `${scene.id} 카드 위 경고색`).toBeGreaterThanOrEqual(4.5) // 음악 카드의 "연결 실패"
     }
   }
 })
@@ -738,7 +740,7 @@ test('[레이아웃] 패널 구역이 정해진 순서로 이름표를 달고 �
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const texts = (await pane.findAll({ type: 'Text' })).map(node => node.text)
-  const order = ['빠른 실행', '사용량', '작업 현황', '이 채팅에서 만진 파일', '음악'].map(title => texts.indexOf(title))
+  const order = ['음악', '빠른 실행', '사용량', '작업 현황', '이 채팅에서 만진 파일'].map(title => texts.indexOf(title))
 
   expect(order.every(index => index >= 0)).toBe(true)
   expect([...order].sort((a, b) => a - b)).toEqual(order) // 위에서 아래로 이 순서
@@ -1345,4 +1347,78 @@ test('[사용성] 사용량이 90%를 넘으면 한 번만 알림이 뜬다(측�
   await measure(70)
   await measure(93)
   expect(alerts()).toHaveLength(2)
+})
+
+test('[레이아웃] 음악은 그림 바로 아래 카드로 놓이고, 사용량·만진 파일과 같은 카드 배경이다', async ($, on) => {
+  const clock = world(on)
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const all = await pane.findAll({ type: 'Box' })
+  const bands = all.filter(node => node.props.paddingY === 'md') // 구역(띠)들: 설정, 음악, 빠른 실행, 사용량, 작업 현황, 만진 파일
+  const card = surfaceOf(SCENES.attic)
+  const tones = bands.map(node => node.props.backgroundColor)
+
+  expect(tones[1]).toBe(card) // 설정 다음, 빠른 실행 앞이 음악
+  expect(tones[3]).toBe(card) // 사용량
+  expect(tones[5]).toBe(card) // 만진 파일
+  expect(tones[2]).not.toBe(card) // 빠른 실행은 바탕
+  const texts = (await pane.findAll({ type: 'Text' })).map(node => node.text)
+
+  expect(texts.indexOf('음악')).toBeLessThan(texts.indexOf('빠른 실행'))
+  await pane.unmount()
+})
+
+// ── 오늘 통계 병합 시험: 채팅이 여럿이어도 기록이 서로 덮어쓰이지 않는다 ───────────────────
+
+test('[데이터] 오늘 기록 합치기: 숫자는 큰 쪽, 파일은 합집합, 줄어들지 않는다', async () => {
+  const a = { date: '2026-11-4', prompts: 5, actions: 9, files: ['a', 'b'] }
+  const b = { date: '2026-11-4', prompts: 8, actions: 7, files: ['b', 'c'] }
+
+  expect(mergeToday(a, b)).toEqual({ date: '2026-11-4', prompts: 8, actions: 9, files: ['a', 'b', 'c'] })
+  expect(mergeToday(b, a)).toEqual({ date: '2026-11-4', prompts: 8, actions: 9, files: ['b', 'c', 'a'] })
+  const many = { ...a, files: Array.from({ length: 400 }, (_, i) => `x${i}`) }
+
+  expect(mergeToday(many, { ...b, files: Array.from({ length: 400 }, (_, i) => `y${i}`) }).files).toHaveLength(500) // 한도는 그대로
+})
+
+test('[데이터] 다른 채팅이 더한 오늘 기록이 이 채팅의 숫자에 반영되고, 새 기록은 그 위에 더해진다', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  const clock = world(on, { liveStore: store })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  expect(await counter(pane, '프롬프트')).toBe('0')
+  // 다른 채팅이 그동안 프롬프트 5개·도구 9개·파일 1개를 더해 저장소에 남겼다.
+  store.today = { date: '2026-11-4', prompts: 5, actions: 9, files: ['C:/other/a.ts'] }
+  await clock.advance(60_000) // 1분마다 오는 갱신: 아무것도 누르지 않아도 따라온다
+  expect(await counter(pane, '프롬프트')).toBe('5')
+  expect(await counter(pane, '도구 실행')).toBe('9')
+  expect(await counter(pane, '수정 파일')).toBe('1')
+  await $.tool.call({ tool: 'Bash', command: 'ls' }) // 이 채팅의 새 기록은 그 위에 더한다(덮어쓰지 않는다)
+  expect(await counter(pane, '도구 실행')).toBe('10')
+  expect((store.today as { actions: number }).actions).toBe(10)
+  await $.tool.call({ tool: 'Edit', file_path: 'C:/work/p/b.ts', old_string: 'a', new_string: 'b' })
+  expect(await counter(pane, '수정 파일')).toBe('2') // 다른 채팅의 파일 1개 + 이 채팅의 파일 1개
+  expect((await pane.findAll({ type: 'Button' })).filter(button => button.key?.startsWith('file:'))).toHaveLength(1) // 이 채팅 목록은 따로
+  await pane.unmount()
+})
+
+test('[데이터] 어제 날짜의 기록은 저장소에 있어도 오늘 숫자에 섞이지 않는다', async ($, on) => {
+  const store: Record<string, unknown> = { today: { date: '2026-11-3', prompts: 50, actions: 90, files: ['C:/old.ts'] } }
+  const clock = world(on, { liveStore: store })
+
+  await $.session.start(START)
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  await clock.advance(60_000)
+  expect(await counter(pane, '프롬프트')).toBe('0')
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(await counter(pane, '도구 실행')).toBe('1')
+  expect((store.today as { date: string }).date).toBe('2026-11-4')
+  await pane.unmount()
 })
