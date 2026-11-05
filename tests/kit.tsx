@@ -44,13 +44,13 @@ export const counter = async (ui: { findAll: (q: object) => Promise<{ text?: str
 }
 
 /** 엔진이 받쳐 주는 호출을 흉내 낸다. 시계와 저장소는 키트가 메모리로 답한다. */
-export type Spy = { ran: string[]; filled: string[]; toasts: string[] }
+export type Spy = { ran: string[]; filled: string[]; toasts: string[]; runs: string[][] } // runs: process.run으로 실행한 명령(인자 목록)
 
 export type GitFake = { status: string; exitCode?: number }
 
 export type World = { spy?: Spy; stored?: object; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
 
-export const newSpy = (): Spy => ({ ran: [], filled: [], toasts: [] })
+export const newSpy = (): Spy => ({ ran: [], filled: [], toasts: [], runs: [] })
 
 export const world = (
   on: Parameters<typeof mock.clock>[0],
@@ -90,15 +90,19 @@ export const world = (
   })
   on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
   on('session.usage', () => ({ value: usage }))
-  on('process.run', (_, e) => ({
-    value: {
-      exitCode: e.argv[0] === 'where.exe' ? whereExit : e.argv.includes('status') ? (git.exitCode ?? 0) : 0,
-      stdout: e.argv.includes('status') ? git.status : GIT_LOG,
-      stderr: '',
-      isStdoutTruncated: false,
-      isStderrTruncated: false,
-    },
-  }))
+  on('process.run', (_, e) => {
+    spy.runs.push([...e.argv])
+
+    return {
+      value: {
+        exitCode: e.argv[0] === 'where.exe' ? whereExit : e.argv.includes('status') ? (git.exitCode ?? 0) : 0,
+        stdout: e.argv.includes('status') ? git.status : GIT_LOG,
+        stderr: '',
+        isStdoutTruncated: false,
+        isStderrTruncated: false,
+      },
+    }
+  })
   on('tool.call', () => tool.value)
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
