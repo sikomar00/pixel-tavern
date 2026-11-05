@@ -50,25 +50,58 @@ export type Spy = { ran: string[]; filled: string[]; toasts: string[]; runs: str
 
 export type GitFake = { status: string; exitCode?: number }
 
-export type World = { runDelaysMs?: number[]; runFails?: boolean; spy?: Spy; stored?: object; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
+/**
+ * 저장소를 여러 채팅이 나눠 쓸 때 생기는 겹침을 흉내 낸다. afterGet: 값을 읽어 간 "직후" 다른 채팅이 끼어든다.
+ * setDelayMs: 같은 키의 nth(0부터)번째 쓰기를 그만큼 늦게 끝낸다(가짜 시계) — 쓰기 끝나는 순서가 뒤바뀌는 경우를 만든다.
+ */
+export type StoreHooks = { afterGet?: (key: string) => void | Promise<void>; setDelayMs?: (key: string, nth: number) => number }
+
+export type World = { now?: number; storeHooks?: StoreHooks; runDelaysMs?: number[]; runFails?: boolean; spy?: Spy; stored?: object; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
+
+/** 저장소에 남은 그날의 칸(today:<날짜>:<칸 이름>)들의 값. 합계 키(today)는 옛 방식이라 들어 있지 않다. */
+export const slotsOf = (store: Record<string, unknown>, day: string): { date: string; prompts: number; actions: number; files: string[] }[] =>
+  Object.entries(store)
+    .filter(([key]) => key.startsWith(`today:${day}:`))
+    .map(([, value]) => value as { date: string; prompts: number; actions: number; files: string[] })
 
 export const newSpy = (): Spy => ({ ran: [], filled: [], toasts: [], runs: [] })
 
 export const world = (
   on: Parameters<typeof mock.clock>[0],
-  { runDelaysMs = [], runFails = false, spy = newSpy(), stored = {}, git = { status: GIT_STATUS }, usage = USAGE, whereExit = 0, tool = { value: { result: {} } }, liveStore }: World = {},
+  { now = NOON, storeHooks = {}, runDelaysMs = [], runFails = false, spy = newSpy(), stored = {}, git = { status: GIT_STATUS }, usage = USAGE, whereExit = 0, tool = { value: { result: {} } }, liveStore }: World = {},
 ) => {
-  const clock = mock.clock(on, { now: NOON })
+  const clock = mock.clock(on, { now })
 
   if (liveStore === undefined) mock.store(on, stored)
   else {
     // 채팅끼리 공유되는 저장소를 흉내 낸다: 시험이 객체를 직접 고쳐 "다른 채팅"의 기록을 남길 수 있다.
-    on('store.get', (_, e) => ({ value: liveStore[e.key] }))
-    on('store.set', (_, e) => {
-      liveStore[e.key] = e.value
+    // 진짜 저장소처럼 JSON을 거쳐 주고받는다(같은 객체를 서로 고치지 못한다).
+    const copy = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)))
+    const sets = new Map<string, number>()
+
+    on('store.get', async (_, e) => {
+      const value = copy(liveStore[e.key])
+
+      await storeHooks.afterGet?.(e.key)
+
+      return { value }
+    })
+    on('store.set', async (_, e) => {
+      const nth = sets.get(e.key) ?? 0
+      const delay = storeHooks.setDelayMs?.(e.key, nth) ?? 0
+
+      sets.set(e.key, nth + 1)
+      if (delay > 0) await clock.sleep(delay)
+      liveStore[e.key] = copy(e.value)
 
       return { value: undefined }
     })
+    on('store.delete', (_, e) => {
+      delete liveStore[e.key]
+
+      return { value: undefined }
+    })
+    on('store.keys', () => ({ value: Object.keys(liveStore) }))
   }
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', () => ({ value: { command: 'tavern' } }))
@@ -84,6 +117,7 @@ export const world = (
 
     return { text: '' }
   })
+  on('prompt.submit', (_, e) => ({ text: e.text }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('prompt.fill', (_, e) => {

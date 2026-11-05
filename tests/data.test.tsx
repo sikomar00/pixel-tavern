@@ -6,11 +6,11 @@ import { parseLog, parseStatus } from '../hooks/git'
 import { bannerSvg } from '../hooks/banner'
 import { HELP } from '../hooks/help'
 import { NO_ALERTS, checkAlerts } from '../hooks/alerts'
-import { mergeToday } from '../hooks/state'
+import { sumToday } from '../hooks/stats'
 import { filledSegments as segmentsFor, usageSummary, usageSvg } from '../hooks/usage'
 import { MODES, SCENES } from '../hooks/scenes'
 import { WARN_COLOR } from '../hooks/svg'
-import { ARMED_LABEL, BAND, GIT_LOG, GIT_STATUS, METAPHOR_NAMES, NOON, PANE, START, USAGE, counter, filledSegments, newSpy, world } from './kit'
+import { ARMED_LABEL, BAND, GIT_LOG, GIT_STATUS, METAPHOR_NAMES, NOON, PANE, START, USAGE, counter, filledSegments, newSpy, slotsOf, world } from './kit'
 
 test('[데이터] 순수 도우미: 시간·모델·파일 주소·git 출력 읽기', async () => {
   const now = Date.parse('2026-11-04T10:00:00Z')
@@ -342,15 +342,19 @@ test('[데이터] 사용량 알림 규칙: 90% 이상이 처음 될 때만 알�
   expect(step(reading(10, 92))).toHaveLength(1) // 새 구간에서 다시 알린다
 })
 
-test('[데이터] 오늘 기록 합치기: 숫자는 큰 쪽, 파일은 합집합, 줄어들지 않는다', async () => {
+// 옛 시험("숫자는 큰 쪽")을 바꾼 것: 모두가 한 키에 합계를 쓰던 방식은 같은 순간에 늘린 것을 잃었다(tests/stats.test.tsx).
+// 이제 채팅마다 자기 칸에 쓰므로 합계는 칸들의 합이다. 파일은 합집합, 500개 한도는 그대로.
+test('[데이터] 오늘 기록 합치기: 칸마다 쓴 기록을 더하고(숫자는 합, 파일은 합집합), 다른 날은 넣지 않고, 파일은 500개까지만 센다', async () => {
   const a = { date: '2026-11-4', prompts: 5, actions: 9, files: ['a', 'b'] }
   const b = { date: '2026-11-4', prompts: 8, actions: 7, files: ['b', 'c'] }
 
-  expect(mergeToday(a, b)).toEqual({ date: '2026-11-4', prompts: 8, actions: 9, files: ['a', 'b', 'c'] })
-  expect(mergeToday(b, a)).toEqual({ date: '2026-11-4', prompts: 8, actions: 9, files: ['b', 'c', 'a'] })
+  expect(sumToday('2026-11-4', [a, b])).toEqual({ date: '2026-11-4', prompts: 13, actions: 16, files: ['a', 'b', 'c'] })
+  expect(sumToday('2026-11-4', [b, a]).files).toEqual(['b', 'c', 'a'])
+  expect(sumToday('2026-11-4', [a, { ...b, date: '2026-11-3' }])).toEqual({ date: '2026-11-4', prompts: 5, actions: 9, files: ['a', 'b'] }) // 어제 칸은 넣지 않는다
+  expect(sumToday('2026-11-4', [])).toEqual({ date: '2026-11-4', prompts: 0, actions: 0, files: [] })
   const many = { ...a, files: Array.from({ length: 400 }, (_, i) => `x${i}`) }
 
-  expect(mergeToday(many, { ...b, files: Array.from({ length: 400 }, (_, i) => `y${i}`) }).files).toHaveLength(500) // 한도는 그대로
+  expect(sumToday('2026-11-4', [many, { ...b, files: Array.from({ length: 400 }, (_, i) => `y${i}`) }]).files).toHaveLength(500) // 한도는 그대로
 })
 
 test('[데이터] 다른 채팅이 더한 오늘 기록이 이 채팅의 숫자에 반영되고, 새 기록은 그 위에 더해진다', async ($, on) => {
@@ -370,7 +374,8 @@ test('[데이터] 다른 채팅이 더한 오늘 기록이 이 채팅의 숫자�
   expect(await counter(pane, '수정 파일')).toBe('1')
   await $.tool.call({ tool: 'Bash', command: 'ls' }) // 이 채팅의 새 기록은 그 위에 더한다(덮어쓰지 않는다)
   expect(await counter(pane, '도구 실행')).toBe('10')
-  expect((store.today as { actions: number }).actions).toBe(10)
+  expect((store.today as { actions: number }).actions).toBe(9) // 다른 채팅이 남긴 옛 합계 키는 읽기만 하고 고치지 않는다
+  expect(slotsOf(store, '2026-11-4').map(slot => slot.actions)).toEqual([1]) // 이 채팅의 1번은 자기 칸에 쓴다(합 10)
   await $.tool.call({ tool: 'Edit', file_path: 'C:/work/p/b.ts', old_string: 'a', new_string: 'b' })
   expect(await counter(pane, '수정 파일')).toBe('2') // 다른 채팅의 파일 1개 + 이 채팅의 파일 1개
   expect((await pane.findAll({ type: 'Button' })).filter(button => button.key?.startsWith('file:'))).toHaveLength(1) // 이 채팅 목록은 따로
@@ -389,6 +394,7 @@ test('[데이터] 어제 날짜의 기록은 저장소에 있어도 오늘 숫�
   expect(await counter(pane, '프롬프트')).toBe('0')
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(await counter(pane, '도구 실행')).toBe('1')
-  expect((store.today as { date: string }).date).toBe('2026-11-4')
+  expect(store.today).toBeUndefined() // 어제 날짜의 옛 합계 키는 정리된다
+  expect(slotsOf(store, '2026-11-4').map(slot => slot.actions)).toEqual([1]) // 오늘 기록은 이 채팅의 칸에 쓴다
   await pane.unmount()
 })
