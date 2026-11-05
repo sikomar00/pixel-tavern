@@ -20,7 +20,7 @@ export const clip = (s: string, max: number): string =>
 
 /** 한도가 이 값 이상이면 배너와 패널이 같은 경고색으로 그린다. */
 export const WARN_PERCENT = 85
-export const WARN_COLOR = '#ff6b6b'
+export const WARN_COLOR = '#ff7a7a' // 4개 장면의 배경·카드 위에서 글자 대비 4.5 이상
 
 const HANGUL_OR_HAN = /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af\u4e00-\u9fff]/
 
