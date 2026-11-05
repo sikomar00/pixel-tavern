@@ -58,6 +58,7 @@ declare module 'claude-code' {
     'pixel-tavern': {
       mood: Shaped<Mood>
       isHidden: boolean
+      isStill: boolean
       slot: string
       own: Shaped<Today>
       others: Shaped<Today>

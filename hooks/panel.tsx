@@ -12,6 +12,7 @@ import { band, cardOf, chevron, header, inset, isFolded, mark, summary } from '.
 import { music } from './music'
 import { quick } from './quick'
 import { MODES, SCENES } from './scenes'
+import { stillSvg } from './still'
 import { SPACE, surfaceOf } from './theme'
 import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
 
@@ -52,14 +53,14 @@ const FILES_COLLAPSED = 4 // 파일 목록의 기본 노출 수(전체 보기를
 const SCENE_WIDTH = 340
 const SCENE_HEIGHT = 296 // 그림은 74줄까지(칸 4배)
 
-/** 영역 1: 장면 선택. 테마는 4개뿐이라 모드 없이 하나로 고른다. 오른쪽에 그림 접기와 "?"(배너 버튼까지 설명). */
+/** 영역 1: 장면 선택. 테마는 4개뿐이라 모드 없이 하나로 고른다. 오른쪽에 그림 접기·움직임 켬/끔과 "?"(배너 버튼까지 설명). 좁으면 버튼이 다음 줄로 내려간다. */
 const settings = (ui: Ui, d: PanelData, act: Actions) => {
   const { Box, Button, Select } = ui
   const ids = MODES.flatMap(entry => entry.scenes)
 
   return band(ui, d.scene.base, [
     inset(ui, [
-      <Box flexDirection="row" alignItems="center" gap={SPACE.control}>
+      <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={SPACE.control}>
         <Box flexGrow={1}>
           <Select
             key="scene"
@@ -70,6 +71,7 @@ const settings = (ui: Ui, d: PanelData, act: Actions) => {
           />
         </Box>
         <Button key="fold:art" plain label={isFolded(d, 'art') ? '그림 ▸' : '그림 ▾'} onPress={() => act.toggleSection('art')} />
+        <Button key="still" plain label={d.isStill ? '움직임 끔' : '움직임 켬'} onPress={() => act.toggleStill()} />
         {mark(ui, d, act, 'scene')}
       </Box>,
       ...cardOf(ui, d, 'scene'),
@@ -241,7 +243,7 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
         : [
             <Box backgroundColor={d.scene.base} justifyContent="center">
               <Svg
-                source={composeScene(ART[d.scene.id], percent)}
+                source={stillSvg(composeScene(ART[d.scene.id], percent), d.isStill)}
                 alt={`${d.scene.title}: ${d.scene.motto}`}
                 width={SCENE_WIDTH}
                 height={SCENE_HEIGHT}

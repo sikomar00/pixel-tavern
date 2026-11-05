@@ -15,6 +15,7 @@ import { DEFAULT_VOLUME, isVolume } from './volume'
 const DEFAULT_COLLAPSED: string[] = ['commits', 'changes']
 const mood = atom({ plugin: 'pixel-tavern', key: 'mood' } as const, DEFAULT_MOOD as Mood, { shape: 'mood-1' })
 const isHidden = atom({ plugin: 'pixel-tavern', key: 'isHidden' } as const, false)
+const isStill = atom({ plugin: 'pixel-tavern', key: 'isStill' } as const, false)
 const usage = atom({ plugin: 'pixel-tavern', key: 'usage' } as const, null)
 const git = atom({ plugin: 'pixel-tavern', key: 'git' } as const, null, { shape: 'git-1' }) // git-1: 바뀐 파일 목록(files)이 생겼다
 const model = atom({ plugin: 'pixel-tavern', key: 'model' } as const, null)
@@ -61,17 +62,19 @@ export const toUsage = (u: {
   usd: u.cost?.usd ?? null,
 })
 
-/** 세션이 시작될 때 저장소에서 기분·숨김·오늘 통계·음량을 불러온다. 모양이 틀린 값은 버린다. */
+/** 세션이 시작될 때 저장소에서 기분·숨김·움직임·오늘 통계·음량을 불러온다. 모양이 틀린 값은 버린다. */
 export async function loadStored($: EngineInterface): Promise<void> {
-  const [m, hidden, level, saved] = await Promise.all([
+  const [m, hidden, still, level, saved] = await Promise.all([
     $.store.get('mood'),
     $.store.get('isHidden'),
+    $.store.get('isStill'),
     $.store.get('volume'),
     $.store.get('collapsed'),
   ])
 
   if (isMood(m)) await update($, mood, () => m)
   if (typeof hidden === 'boolean') await update($, isHidden, () => hidden)
+  if (typeof still === 'boolean') await update($, isStill, () => still)
   if (isVolume(level)) await update($, volume, () => level)
   if (isStringList(saved)) await update($, collapsed, () => saved)
   await syncStats($) // 오늘 통계: 다른 채팅과 앞선 실행이 남긴 칸을 읽어 둔다
@@ -103,7 +106,7 @@ export async function refresh($: EngineInterface): Promise<void> {
 
 /** 배너와 패널이 함께 쓰는 값. 그리는 중에 부르면 값이 바뀔 때 다시 그려진다. */
 export async function readView($: EngineInterface) {
-  const [m, u, g, mdl, proj, now, rad, note, canPlay] = await Promise.all([
+  const [m, u, g, mdl, proj, now, rad, note, canPlay, still] = await Promise.all([
     read($, mood),
     read($, usage),
     read($, git),
@@ -113,10 +116,11 @@ export async function readView($: EngineInterface) {
     read($, radio),
     read($, radioNote),
     read($, isMusicAvailable),
+    read($, isStill),
     read($, tick), // 1분마다 남은 시간 표시를 다시 그리게 한다
   ])
 
-  return { scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad, radioNote: note, isMusicAvailable: canPlay }
+  return { scene: SCENES[currentSceneId(m)], usage: u, git: g, model: mdl, project: proj, now, radio: rad, radioNote: note, isMusicAvailable: canPlay, isStill: still }
 }
 
 export async function readPanel($: EngineInterface) {
@@ -165,6 +169,23 @@ export async function writeMood($: EngineInterface, next: Mood): Promise<void> {
 export async function writeHidden($: EngineInterface, hidden: boolean): Promise<void> {
   await update($, isHidden, () => hidden)
   await $.store.set('isHidden', hidden)
+}
+
+/**
+ * 움직이는 그림을 멈추거나 다시 움직이게 하고 저장소에 남긴다(다음에 열어도 그대로). 바뀐 뒤의 값을 돌려준다.
+ * 값을 읽고 따로 쓰면 거의 동시에 두 번 눌렀을 때 둘 다 같은 값을 읽어 한 번이 사라져서, 바꾸는 순간의 값에서 뒤집는다(시험으로 확인).
+ */
+export async function toggleStill($: EngineInterface): Promise<boolean> {
+  let next = false
+
+  await update($, isStill, current => {
+    next = !current
+
+    return next
+  })
+  await $.store.set('isStill', next)
+
+  return next
 }
 
 export async function writeArmed($: EngineInterface, armed: QuickKey | null): Promise<void> {

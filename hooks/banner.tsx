@@ -6,6 +6,7 @@ import { ART } from './art'
 import { fmtReset, fmtTokens, isPast, shortModel } from './format'
 import { GAUGE_NAMES } from './scenes'
 import type { Scene } from './scenes'
+import { stillSvg } from './still'
 import { clipWidth, svgText, textWidth, WARN_COLOR, WARN_PERCENT } from './svg'
 import { usageSummary } from './usage'
 
@@ -18,6 +19,8 @@ export type BannerData = {
   now: number
   radio: RadioState
   isMusicAvailable: boolean
+  /** 참이면 그림이 움직이지 않는다(패널의 "움직임" 버튼). */
+  isStill: boolean
 }
 
 type Gauge = { name: string; percent: number | null; sub: string }
@@ -100,7 +103,7 @@ export const bannerSvg = (d: BannerData): string => {
       .map((g, i) => gaugeSvg(GAUGE_X[i] ?? 0, g, scene))
       .join('')
 
-  return ART[scene.id].strip.replace('</svg>', `${overlay}</svg>`)
+  return stillSvg(ART[scene.id].strip, d.isStill).replace('</svg>', `${overlay}</svg>`)
 }
 
 /** SVG를 못 그리는 화면(터미널 등)과 스크린 리더용 한 줄 글자. */

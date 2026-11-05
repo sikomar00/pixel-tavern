@@ -12,6 +12,7 @@ import {
   readMood,
   readOpenHelp,
   toggleDiag,
+  toggleStill,
   refreshGit,
   readRadio,
   writeArmed,
@@ -66,6 +67,7 @@ export type Actions = {
   setVolume: (level: number) => Promise<void>
   toggleHelp: (id: string) => Promise<void>
   toggleDiag: () => Promise<boolean>
+  toggleStill: () => Promise<boolean>
   toggleSection: (id: string) => Promise<void>
   toggleFiles: () => Promise<void>
 }
@@ -161,6 +163,7 @@ export function makeActions($: EngineInterface): Actions {
     // "?"를 누르면 그 설명이 패널 안에서 펼쳐지고, 다시 누르면 접힌다(하나만 열린다).
     toggleHelp: async id => writeOpenHelp($, (await readOpenHelp($)) === id ? '' : id),
     toggleDiag: () => toggleDiag($),
+    toggleStill: () => toggleStill($),
     toggleSection: async id => {
       const ids = await readCollapsed($)
 
