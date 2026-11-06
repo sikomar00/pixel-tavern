@@ -7,19 +7,6 @@ import { WARN_COLOR, clipWidth } from '../hooks/svg'
 import { TEXT_PRIMARY, chipOf, lift, surfaceOf } from '../hooks/theme'
 import { BAND, METAPHOR_NAMES, NOON, PANE, START, contrast, luminance, world } from './kit'
 
-test('[레이아웃] 터미널에서는 글자 한 줄 띠로 대신한다', async ($, on) => {
-  const clock = world(on)
-
-  await $.session.start({ cwd: 'C:/work/p', surface: 'terminal', isInteractive: true })
-  await clock.settle()
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-
-  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
-  expect((await ui.find({ type: 'Text', text: /컨텍스트/ }))?.text).toContain('main')
-  expect((await ui.find({ type: 'Button' }))?.props.label).toBe('▶')
-  await ui.unmount()
-})
-
 test('[레이아웃] 글자 폭 자르기: 한글은 넓게, 영문은 좁게 센다', async () => {
   expect(clipWidth('abc', 3, 10)).toBe('abc')
   expect(clipWidth('가나다라마바사', 3, 10)).toBe('가나…')

@@ -86,7 +86,7 @@ export const toPorcelainZ = (text: string): string =>
  */
 export type StoreHooks = { afterGet?: (key: string) => void | Promise<void>; setDelayMs?: (key: string, nth: number) => number }
 
-export type World = { now?: number; storeHooks?: StoreHooks; runDelaysMs?: number[]; runFails?: boolean; spy?: Spy; stored?: Record<string, unknown>; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
+export type World = { surfaces?: ('terminal' | 'desktop' | 'vscode' | 'mobile')[]; opened?: object[]; now?: number; storeHooks?: StoreHooks; runDelaysMs?: number[]; runFails?: boolean; spy?: Spy; stored?: Record<string, unknown>; git?: GitFake; usage?: typeof USAGE; whereExit?: number; tool?: { value: object }; liveStore?: Record<string, unknown> }
 
 /** 저장소에 남은 그날의 칸(today:<날짜>:<칸 이름>)들의 값. 합계 키(today)는 옛 방식이라 들어 있지 않다. */
 export const slotsOf = (store: Record<string, unknown>, day: string): { date: string; prompts: number; actions: number; files: string[] }[] =>
@@ -98,7 +98,7 @@ export const newSpy = (): Spy => ({ ran: [], filled: [], toasts: [], runs: [] })
 
 export const world = (
   on: Parameters<typeof mock.clock>[0],
-  { now = NOON, storeHooks = {}, runDelaysMs = [], runFails = false, spy = newSpy(), stored = {}, git = { status: GIT_STATUS }, usage = USAGE, whereExit = 0, tool = { value: { result: {} } }, liveStore }: World = {},
+  { surfaces = ['desktop'], opened, now = NOON, storeHooks = {}, runDelaysMs = [], runFails = false, spy = newSpy(), stored = {}, git = { status: GIT_STATUS }, usage = USAGE, whereExit = 0, tool = { value: { result: {} } }, liveStore }: World = {},
 ) => {
   const clock = mock.clock(on, { now })
 
@@ -155,7 +155,12 @@ export const world = (
 
     return { isFilled: true }
   })
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.surfaces', () => ({ value: surfaces }))
+  on('ui.open', (_, e) => {
+    opened?.push(e) // 패널을 열 때 보낸 요청(opened를 주면 쌓는다)
+
+    return { value: { isPlaced: true } }
+  })
   on('ui.panes', () => ({ value: [] }))
   on('ui.log', () => ({ value: undefined }))
   on('ui.toast', (_, e) => {
