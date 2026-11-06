@@ -1,7 +1,7 @@
 """패널을 실제 앱 없이 근사해서 HTML로 그린다. 한 줄로: python tools/render_panel.py
 
 하는 일
-  1. tools/tree_dump.scenario.tsx 를 잠깐 zz-tree.test.tsx 로 복사해 `claude plugin test` 로 돌린다(끝나면 지운다).
+  1. tools/tree_dump.scenario.tsx 를 임시 복사본 폴더(hooks·types와 이 파일만)에서 `claude plugin test` 로 돌린다(끝나면 폴더를 지운다).
   2. 시험 도구가 내주는 패널 화면 구성 트리(JSON)를 HTML/CSS로 옮겨 그린다(tools/preview/tree-check.html).
   3. 상태마다 전체 높이와 구역별 높이를 알려 준다.
 
@@ -21,10 +21,10 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCENARIO = ROOT / "tools" / "tree_dump.scenario.tsx"
-TEMP_TEST = ROOT / "zz-tree.test.tsx"
 MEASURED = ROOT / "tools" / "measured.json"
 DEFAULTS = {
     "width": 268,
@@ -50,17 +50,21 @@ def load_settings() -> dict:
 
 
 def run_scenarios() -> str:
+    """시나리오만 든 복사본 폴더에서 돌린다(저장소의 시험 전체를 병렬로 돌리면 컴퓨터가 바쁠 때 시간 초과로 트리를 놓친다)."""
     claude = shutil.which("claude")
     if claude is None:
         sys.exit("claude 명령을 찾지 못했다.")
-    shutil.copyfile(SCENARIO, TEMP_TEST)
-    try:
-        done = subprocess.run([claude, "plugin", "test", str(ROOT)], capture_output=True, text=True, encoding="utf-8", errors="replace")
-    finally:
-        TEMP_TEST.unlink(missing_ok=True)
+    with tempfile.TemporaryDirectory() as work:
+        copy = pathlib.Path(work)
+        for name in ("hooks", "types", ".claude-plugin"):
+            shutil.copytree(ROOT / name, copy / name)
+        shutil.copyfile(ROOT / "tsconfig.json", copy / "tsconfig.json")
+        (copy / "tests").mkdir()
+        shutil.copyfile(SCENARIO, copy / "tests" / "zz-tree.test.tsx")
+        done = subprocess.run([claude, "plugin", "test", str(copy)], capture_output=True, text=True, encoding="utf-8", errors="replace")
     output = done.stdout + done.stderr  # 시험 도구는 console.log를 표준 오류로 내보내기도 한다
     if "@@TREE@@" not in output:
-        sys.exit("트리를 얻지 못했다:\n" + output[-2000:])
+        sys.exit("트리를 얻지 못했다: " + output[-2000:])
     return output
 
 

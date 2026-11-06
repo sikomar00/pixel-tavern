@@ -30,6 +30,7 @@ type Opts = {
   columns?: number // 패널 본문의 글자 칸 수(기본 51)
   band?: boolean // 패널 대신 프롬프트 위 배너를 그린다
   hide?: boolean // 배너의 ✕를 눌러 숨긴 상태
+  effort?: string // 모델 요청 한 번을 보내 모델(Opus 5.5)과 effort를 알린다
 }
 
 const strip = (node: any): any => ({
@@ -71,6 +72,9 @@ const scenario = (opts: Opts) =>
       },
     }))
     on('tool.call', () => ({ result: {} }))
+    on('turn.step', async function* (_, e) {
+      return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null }
+    })
     on('ui.render', ($$, e) => {
       const { Text } = $$.ui.resolve(e)
 
@@ -98,6 +102,7 @@ const scenario = (opts: Opts) =>
     for (let i = 1; i <= (opts.edits ?? 0); i++) await $.tool.call({ tool: 'Edit', file_path: `C:/work/p/src/components/file-number-${i}.tsx`, old_string: 'a', new_string: 'b' })
     const pane = await $.ui.mount(opts.band === true ? { ...BAND, props: { ...BAND.props, bodyColumns: opts.columns ?? 100 }, surface } : { ...PANE, props: { ...PANE.props, bodyColumns: opts.columns ?? 51 }, surface })
 
+    if (opts.effort !== undefined) for await (const chunk of $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', effort: opts.effort as 'high', messageCount: 1 })) void chunk
     if (opts.hide) await pane.press({ key: 'hide' })
     if (opts.open) await pane.press({ key: 'files-toggle' })
     if (opts.arm) await pane.press({ key: 'commit' })
@@ -126,8 +131,8 @@ scenario({ id: 'picker-open', cwd: 'C:/work/demo', scene: 'jazz', usage: usage(4
 scenario({ id: 'folded', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['art', 'usage', 'status', 'files', 'music'] }) // 모두 접은 상태
 
 // 터미널 화면(tools/render_term.py가 그린다)
-scenario({ id: 'term-banner', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, surface: 'terminal', band: true, columns: 100 })
+scenario({ id: 'term-banner', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, surface: 'terminal', band: true, columns: 100, effort: 'xhigh' })
 scenario({ id: 'term-banner-hidden', cwd: 'C:/work/demo', usage: usage(42, 23), surface: 'terminal', band: true, hide: true })
 scenario({ id: 'term-banner-neon', cwd: 'C:/work/a-very-long-project-name-that-keeps-going', scene: 'neon', usage: usage(97, 120), edits: 3, surface: 'terminal', band: true, columns: 80, radio: 'playing' })
-scenario({ id: 'term-panel-56', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, surface: 'terminal', columns: 56 })
+scenario({ id: 'term-panel-56', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, surface: 'terminal', columns: 56, effort: 'high' })
 scenario({ id: 'term-panel-100', cwd: 'C:/work/demo', scene: 'jazz', usage: usage(70, 23), edits: 2, surface: 'terminal', columns: 100, radio: 'playing', picker: true })
