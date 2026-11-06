@@ -1,5 +1,13 @@
 # 변경 기록
 
+## 커밋 전(2026-11-06, TypeScript 고정 — F-22, R-14 해결)
+
+- **chore(deps)**: 사용자 승인으로 타입 검사에 쓰는 TypeScript를 **5.9.3 정확한 버전**으로 저장소에 고정했다(`package.json`의 `devDependencies`에 `"typescript": "5.9.3"`, `package-lock.json`에 레지스트리 무결성 해시). 설치는 `npm install --ignore-scripts`(설치 스크립트를 돌리지 않음)로 했고 `node_modules/`는 `.gitignore`에 넣었다. 지금까지 빌려 쓰던 다른 프로젝트 폴더의 TypeScript와 `tsc.js` 파일이 바이트까지 같다(SHA-256 일치). 모드의 런타임에는 아무 영향이 없다(모드는 이 패키지를 불러오지 않는다).
+- **chore(typecheck)**: 처음 한 번 `npm install`, 그 뒤로는 `npm run typecheck`(메모리 한도 `--max-old-space-size=6000` 포함)로 검사한다.
+- **fix(typecheck)**: 고정하는 중에 검사가 `tests/data.test.tsx`의 `$.tool.call({ tool: 'Edit', … })`에서 **TS2589(Type instantiation is excessively deep)** 오류를 냈다(고정과는 상관없다: 빌린 컴파일러도 같았다). 원인은 엔진이 앱에 그때그때 연결된 MCP 서버의 도구 타입(`.claude-plugin/types/claude-code-mcp`, 이번엔 92만 글자)을 새로 써서 도구 입력의 합집합이 커진 것이다. 이 모드는 MCP 도구를 쓰지 않으므로 `tsconfig.json`에서 그 타입을 빼고(`"types": ["claude-code", "claude-code-tools"]`) 검사한다. 오류가 사라졌고 검사가 약 45~67초에서 **6초**로 줄었다. 일부러 넣은 타입 오류는 여전히 잡는다(복사본으로 확인).
+- **test**: 시험은 그대로 157개(파일별 순차 실행에서 모두 통과; 컴퓨터가 바빠 5초 제한에 걸린 둘은 다시 돌려 통과). `tsc` 오류 0개, `validate` 통과.
+- **docs**: F-22 추가, R-14 삭제(해결), 시험 계획·구조·기능 매트릭스·계획·README 갱신.
+
 ## 커밋 전(2026-11-06, 프로젝트 이름·모델·effort 표시와 터미널 구역 안 구분선 — F-21)
 
 - **feat(info)**: 사용자 요청: "현재 프로젝트 이름, 사용 중인 모델과 effort도 표시". 프로젝트 이름은 이미 있었고(배너·패널), 모델은 배너 한 줄에 작게 있었으며, **effort는 어디에도 없었다**. effort는 엔진에 따로 묻는 호출이 없어서, 메인 대화가 모델 요청을 보내기 직전에 오는 `turn.step` 이벤트의 `model`·`effort`를 기억한다(`noteStep`; 서브에이전트의 요청은 건너뛰고, 응답은 건드리지 않고 그대로 통과시킨다). 덤으로 `/model`로 모델을 바꾸면 1분 기다리지 않고 다음 요청부터 바로 따라간다.

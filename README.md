@@ -28,6 +28,8 @@ Claude Code 데스크톱 앱용 모드입니다. 프롬프트 위에 픽셀 배�
 ```
 claude plugin validate .
 claude plugin test .         # tests/ 의 시험 전부
+npm install                      # 처음 한 번: 타입 검사용 TypeScript 5.9.3(정확한 버전 고정)을 설치한다
+npm run typecheck                # 타입 검사(오류 0개가 정상, 약 10초). 시험·validate가 못 보는 타입 오류를 잡는다
 python tools/gen_art.py      # 그림 원본(tools/scenes) -> hooks/art
 python tools/render_panel.py # 패널을 앱 없이 근사해서 HTML로 그린다(tools/preview/tree-check.html)
 python tools/render_term.py  # 터미널 화면(배너·패널)을 글자 칸 격자로 근사해서 HTML로 그린다(tools/preview/term-check.html)

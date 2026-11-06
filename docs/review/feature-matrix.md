@@ -101,4 +101,4 @@
 | 파일 이름에 줄바꿈 같은 제어 문자가 있어도 패널이 사라지지 않음 | **FIXED** | [시험] 고치기 전 시험이 실제로 실패했음(엔진이 패널을 거부) |
 | 자동 시험 | DONE | 157개 통과, 0개 실패(12개 파일, 파일별 순차 실행) |
 | `claude plugin validate` | DONE | 통과(경고는 README의 설치 안내 한 줄뿐) |
-| 타입 검사(`tsc`) | DONE | [실측] 다른 프로젝트 폴더의 TypeScript 5.9.3으로 `node <TypeScript 폴더>/lib/tsc.js -p . --noEmit` → 오류 0개(F-15). TypeScript를 저장소에 고정하는 것은 승인 대기(R-14) |
+| 타입 검사(`tsc`) | DONE | [실측] 저장소에 5.9.3으로 고정(`package.json`·`package-lock.json`)한 TypeScript로 `npm run typecheck` → 오류 0개, 약 6초(F-15, F-22). 일부러 넣은 타입 오류를 잡는 것도 확인 |

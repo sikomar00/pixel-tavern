@@ -49,7 +49,7 @@ register ─┬─ actions ── radio ── state ── git
 - 화면 파일은 상태를 직접 읽지 않고 `PanelData`/`BannerData`로 값을 받는다. 렌더 훅은 읽기만 한다(값을 쓰는 곳은 `actions`·`register`).
 - 실행 시점 순환은 없다. `layout`·`music` → `panel`(`PanelData`), `panel` → `banner`(`BannerData`)는 타입만 가리킨다.
 - 바깥 세계(git, 재생기 프로세스)는 각각 한 파일에 갇혀 있다.
-- 엔진의 검사와 타입 검사에서 알게 된 규칙: (1) `$`를 받는 함수는 파일 맨 위에 선언한다(`register` 같은 함수 안에 두면 모드가 불러와지지 않는다). (2) atom은 읽고 쓰는 파일 안에 선언한다. (3) 같은 일을 하는 훅을 도구 이름 여럿을 도는 반복문 하나로 쓰지 않고 도구마다 하나씩 쓴다(타입 검사기가 합집합 입력 모양을 계산하다 메모리가 바닥난다). (4) `$.ui.open`의 인자는 엔진 타입이 말하는 것만 쓴다(`backgroundColor`는 없다).
+- 엔진의 검사와 타입 검사에서 알게 된 규칙: (1) `$`를 받는 함수는 파일 맨 위에 선언한다(`register` 같은 함수 안에 두면 모드가 불러와지지 않는다). (2) atom은 읽고 쓰는 파일 안에 선언한다. (3) 같은 일을 하는 훅을 도구 이름 여럿을 도는 반복문 하나로 쓰지 않고 도구마다 하나씩 쓴다(타입 검사기가 합집합 입력 모양을 계산하다 메모리가 바닥난다). (4) `$.ui.open`의 인자는 엔진 타입이 말하는 것만 쓴다(`backgroundColor`는 없다). (5) 타입 검사는 앱에 연결된 MCP 서버의 도구 타입(`claude-code-mcp`)을 빼고 돈다(`tsconfig.json`): 서버 구성에 따라 도구 입력 합집합이 커져 `$.tool.call`에서 TS2589가 났고 검사가 매우 느려졌다.
 
 ## 데이터 흐름
 
@@ -90,6 +90,7 @@ register ─┬─ actions ── radio ── state ── git
 | `tools/render_panel.py`, `tree_dump.scenario.tsx` | 미리보기 HTML, 그려진 트리 덤프 |
 | `tools/cellart.py`, `tools/render_term.py` | 장면 SVG → 칸 격자(터미널 그림 데이터 생성), 터미널 화면 근사 그리기 |
 | `tools/measured.json` | 실제 앱에서 잰 값(패널 약 388px, 51열×63줄, 글자 칸 7.72px 등) |
+| `package.json`, `package-lock.json`, `tsconfig.json` | 타입 검사용 TypeScript 5.9.3 고정(`npm run typecheck`), MCP 도구 타입을 뺀 검사 설정. 모드의 런타임과는 상관없다 |
 | `tools/player_check.py` | 실제 Windows 재생기 점검 4종(`normal`·`dead`·`orphan`·`kill`) |
 | `tools/station_check.py` | 방송 목록의 모든 방송을 실제 재생기(음량 0)에 한 곳씩 물려 재생 여부·끊김을 봄(새 방송을 더하기 전에 돌림) |
 | `tools/git_fixture.py` | 실제 git으로 어려운 파일 이름이 든 임시 저장소를 만들어 `status -z` 출력을 찍음(`tests/git.test.tsx`의 `REAL_Z`와 같아야 함) |

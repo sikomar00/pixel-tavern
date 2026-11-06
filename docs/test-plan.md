@@ -48,7 +48,7 @@
 
 1. `claude plugin validate .` — 통과(README 설치 안내 경고는 무시 가능)
 2. `claude plugin test .` — 전부 통과, 개수가 줄지 않았는지 확인
-3. 타입 검사(TypeScript가 있을 때): `node <TypeScript 폴더>/lib/tsc.js -p . --noEmit` — 오류 0개(약 40초, 메모리가 모자라면 `--max-old-space-size=6000`). 시험·`validate`가 못 보는 타입 오류를 잡는다(F-15)
+3. 타입 검사: `npm run typecheck`(처음 한 번 `npm install`로 고정된 TypeScript 5.9.3을 설치) — 오류 0개(약 10초). 시험·`validate`가 못 보는 타입 오류를 잡는다(F-15, F-22). 앱에 연결된 MCP 서버의 도구 타입은 빼고 돈다(`tsconfig.json`: 서버 구성에 따라 `$.tool.call`에서 TS2589가 나던 것을 막고 검사를 빠르게 한다)
 4. 재생기를 건드렸다면 `player_check.py` 네 가지(`normal`·`dead`·`orphan`·`kill`), 방송 목록을 건드렸다면 `station_check.py`
 5. 화면을 건드렸다면 아래 4절의 해당 항목
 
