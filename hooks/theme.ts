@@ -1,4 +1,9 @@
+import type { Elements } from 'claude-code'
+
 import type { Scene } from './scenes'
+
+/** 화면 부품이 받는 요소: 터미널과 데스크톱이 함께 가진 것만. Svg·Raster는 각 화면이 따로 쓴다. */
+export type Ui = Pick<Elements['desktop'], 'Box' | 'Button' | 'Input' | 'Text'>
 
 /**
  * 간격 체계. 데스크톱은 이름(xs~xl)마다 자기 크기로 그린다.

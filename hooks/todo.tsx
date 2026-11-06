@@ -1,12 +1,9 @@
-import type { Elements } from 'claude-code'
-
 import type { Actions } from './actions'
 import { card, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import type { PanelData } from './panel'
 import { SPACE } from './theme'
+import type { Ui } from './theme'
 import { orderTodos } from './todos'
-
-type Ui = Elements['desktop']
 
 const SHOWN = 15 // 한 번에 보이는 항목 수(나머지는 "…외 N개")
 

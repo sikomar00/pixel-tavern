@@ -1,13 +1,11 @@
-import type { Elements, RenderChildren } from 'claude-code'
+import type { RenderChildren } from 'claude-code'
 
 import type { Actions } from './actions'
 import { helpCard, helpMark } from './help'
 import type { HelpId } from './help'
 import type { PanelData } from './panel'
 import { SPACE, chipOf, surfaceOf } from './theme'
-import type { Gap } from './theme'
-
-type Ui = Elements['desktop']
+import type { Gap, Ui } from './theme'
 
 // 패널 구역을 짜는 바탕 부품: 구역(띠)·안쪽 여백·머리글·접기 표시·"?"·칩. 구역 내용은 panel.tsx와 music.tsx에 있다.
 

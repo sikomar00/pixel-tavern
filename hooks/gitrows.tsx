@@ -1,5 +1,3 @@
-import type { Elements } from 'claude-code'
-
 import type { ChangeKind, GitFile } from '../types'
 import type { Actions } from './actions'
 import { shortPath } from './format'
@@ -7,8 +5,7 @@ import { chip, isFolded } from './layout'
 import type { PanelData } from './panel'
 import { clip, WARN_COLOR } from './svg'
 import { SPACE } from './theme'
-
-type Ui = Elements['desktop']
+import type { Ui } from './theme'
 
 const CHANGES_SHOWN = 8 // 바뀐 파일 목록에서 보여 주는 최대 줄 수(나머지는 "…외 N개")
 

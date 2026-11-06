@@ -1,5 +1,3 @@
-import type { Elements } from 'claude-code'
-
 import type { RadioState } from '../types'
 import type { Actions } from './actions'
 import { card, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
@@ -8,9 +6,8 @@ import { STATION_GROUPS } from './scenes'
 import { FAVORITES_TAB, stationsIn, tabOf } from './stations'
 import { WARN_COLOR } from './svg'
 import { SPACE } from './theme'
+import type { Ui } from './theme'
 import { MAX_VOLUME } from './volume'
-
-type Ui = Elements['desktop']
 
 const RADIO_STATUS: Record<RadioState, string> = {
   off: '○ 멈춤',

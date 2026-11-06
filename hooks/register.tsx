@@ -23,6 +23,7 @@ import {
 } from './state'
 import { countAction, countPrompt, readProjects, readToday } from './stats'
 import { readFavorites, readStationTab } from './stations'
+import { TERMINAL_BANNER_ROWS, termBanner, termPanelView } from './term'
 import { readTodos } from './todos'
 import { beginTurn, endTurn, readWork } from './work'
 
@@ -154,6 +155,14 @@ export const register: Register = on => {
     const { Box, Button, Text } = ui
     const data = await readView($)
 
+    if (e.surface === 'terminal' && e.props.maxRows >= TERMINAL_BANNER_ROWS) {
+      return (
+        <Box flexDirection="column">
+          {own}
+          {termBanner(ui as Elements['terminal'], { ...data, isHidden: await readHidden($) }, makeActions($))}
+        </Box>
+      )
+    }
     if (!isRich(e.surface)) {
       return (
         <Box flexDirection="column">
@@ -182,16 +191,16 @@ export const register: Register = on => {
     const ui = $.ui.resolve(e)
     const { Box, Text } = ui
 
-    if (!isRich(e.surface)) {
+    if (!isRich(e.surface) && e.surface !== 'terminal') {
       return (
         <Box>
-          <Text>여관 패널은 데스크톱 앱에서만 볼 수 있어요.</Text>
+          <Text>여관 패널은 데스크톱 앱과 터미널에서만 볼 수 있어요.</Text>
         </Box>
       )
     }
     const frame = { columns: e.props.bodyColumns, rows: e.props.scroll.bodyRows, placement: e.props.placement, surface: e.surface }
     const view = { ...(await readView($)), ...(await readPanel($)), today: await readToday($), projects: await readProjects($), favorites: await readFavorites($), stationTab: await readStationTab($), todos: await readTodos($), work: await readWork($), frame }
 
-    return panelView(ui as Elements['desktop'], view, makeActions($))
+    return e.surface === 'terminal' ? termPanelView(ui as Elements['terminal'], view, makeActions($)) : panelView(ui as Elements['desktop'], view, makeActions($))
   })
 }

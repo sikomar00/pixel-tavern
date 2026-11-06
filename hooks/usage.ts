@@ -17,9 +17,9 @@ const STROKE = 9
 const CENTER_Y = 50
 
 /** 원 하나: 기능 이름(컨텍스트·5시간 한도·주간 한도), 쓴 %, 그 아래 보조 글(토큰 수 또는 리셋까지 남은 시간). */
-type Gauge = { name: string; percent: number | null; sub: string; isStale?: boolean }
+export type Gauge = { name: string; percent: number | null; sub: string; isStale?: boolean }
 
-const gaugesOf = (usage: Usage | null, now: number): Gauge[] => {
+export const gaugesOf = (usage: Usage | null, now: number): Gauge[] => {
   const limit = (kind: string) => usage?.limits.find(l => l.kind === kind)
   const reset = (kind: string): string => {
     const found = limit(kind)
@@ -63,6 +63,14 @@ export const filledSegments = (percent: number): number => {
   if (percent > 0 && rounded === 0) return 1
 
   return Math.min(SEGMENTS - 1, rounded)
+}
+
+/** 글자 막대(터미널)에서 채울 칸 수: 쓰기 시작했으면 한 칸은 채우고, 100% 미만이면 꽉 차 보이지 않게 한다(원의 규칙과 같다). */
+export const barCells = (percent: number, width: number): number => {
+  if (percent >= 100) return width
+  if (percent <= 0) return 0
+
+  return Math.min(width - 1, Math.max(1, Math.round((width * percent) / 100)))
 }
 
 /** 접어 둔 사용량 구역의 머리글에 보이는 한 줄: "컨텍스트 42% · 5시간 23% · 주간 45%". 리셋이 지난 한도는 "리셋됨", 값이 없으면 "-". */

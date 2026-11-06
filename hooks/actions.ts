@@ -83,8 +83,14 @@ export type Actions = {
   clearDoneTodos: () => Promise<void>
 }
 
+// 터미널이 붙어 있으면 패널의 알맞은 크기를 요청한다(옆에 붙을 때의 폭, 프롬프트 위에 놓일 때의 줄 수). 요청일 뿐이고, 데스크톱에는 보내지 않는다.
+const TERMINAL_COLUMNS = 56
+const TERMINAL_ROWS = 30
+
 async function openPane($: EngineInterface): Promise<void> {
-  await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+  const isTerminal = (await $.session.surfaces()).includes('terminal')
+
+  await $.ui.open({ id: PANE_ID, title: PANE_TITLE, ...(isTerminal ? { rows: TERMINAL_ROWS, columns: TERMINAL_COLUMNS } : {}) })
 }
 
 /** 방송이 켜지는 중이거나 나오는 중인가(꺼짐·실패는 아니다). */

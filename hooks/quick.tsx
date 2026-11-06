@@ -1,5 +1,3 @@
-import type { Elements } from 'claude-code'
-
 import type { Work } from '../types'
 import { QUICK } from './actions'
 import type { Actions } from './actions'
@@ -7,8 +5,7 @@ import { card, cardOf, header, inset, mark } from './layout'
 import type { PanelData } from './panel'
 import { WARN_COLOR } from './svg'
 import { SPACE } from './theme'
-
-type Ui = Elements['desktop']
+import type { Ui } from './theme'
 
 /** 누른 빠른 실행의 진행 상태 한 줄. 아무것도 안 눌렀으면 null. 실패만 경고색이다. */
 const workLine = (work: Work): { text: string; isWarn: boolean } | null => {

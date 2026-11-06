@@ -1,12 +1,9 @@
-import type { Elements } from 'claude-code'
-
 import type { ProjectToday } from '../types'
 import type { Actions } from './actions'
 import { isFolded } from './layout'
 import type { PanelData } from './panel'
 import { SPACE } from './theme'
-
-type Ui = Elements['desktop']
+import type { Ui } from './theme'
 
 const NO_NAME = '이전 기록' // 프로젝트 이름이 없는 칸(이름을 남기기 전의 기록)
 

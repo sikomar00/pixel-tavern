@@ -1,10 +1,7 @@
-import type { Elements } from 'claude-code'
-
 import type { Actions } from './actions'
 import type { Scene } from './scenes'
 import { SPACE, chipOf } from './theme'
-
-type Ui = Elements['desktop']
+import type { Ui } from './theme'
 
 // 설명 창의 폭(글자 칸). 작은 "?" 상자 안에서는 폭이 저절로 잡히지 않아서 직접 정한다.
 const HELP_CELLS = 26

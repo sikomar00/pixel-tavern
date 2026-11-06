@@ -79,7 +79,7 @@ const gaugeSvg = (x: number, g: Gauge, scene: Scene): string => {
 }
 
 /** 배너 둘째 줄 왼쪽: 평소엔 장면의 한마디, 음악이 켜져 있으면 지금 나오는 방송. */
-const noteOf = ({ scene, radio }: BannerData): { text: string; color: string } => {
+export const noteOf = ({ scene, radio }: BannerData): { text: string; color: string } => {
   if (radio === 'playing') return { text: `♪ ${scene.music.label}`, color: scene.accent }
   if (radio === 'connecting') return { text: '♪ 연결 중…', color: scene.accent }
   if (radio === 'failed') return { text: '♪ 연결 실패 · ▶로 다시', color: WARN_COLOR }

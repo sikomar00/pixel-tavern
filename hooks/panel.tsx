@@ -15,6 +15,7 @@ import { quick } from './quick'
 import { MODES } from './scenes'
 import { stillSvg } from './still'
 import { SPACE, chipOf } from './theme'
+import type { Ui as CommonUi } from './theme'
 import { todo } from './todo'
 import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
 
@@ -65,7 +66,7 @@ const SCENE_HEIGHT = 296 // 그림은 74줄까지(칸 4배)
  * 영역 1: 장면 고르기. `◀ 장면 이름 n/N ▶`로 한 장면씩 넘긴다(끝에서 처음으로 이어지고 배너의 ⟳와 같은 순서): 목록을 스크롤하지 않는다.
  * 아래 줄에 그림 접기·움직임 켬/끔과 "?"(배너 버튼까지 설명). 좁으면 버튼이 다음 줄로 내려간다.
  */
-const settings = (ui: Ui, d: PanelData, act: Actions) => {
+export const settings = (ui: CommonUi, d: PanelData, act: Actions, hasMotion = true) => {
   const { Box, Button, Text } = ui
   const ids = MODES.flatMap(entry => entry.scenes)
 
@@ -85,7 +86,7 @@ const settings = (ui: Ui, d: PanelData, act: Actions) => {
       </Box>,
       <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={SPACE.control}>
         <Button key="fold:art" plain label={isFolded(d, 'art') ? '그림 ▸' : '그림 ▾'} onPress={() => act.toggleSection('art')} />
-        <Button key="still" plain label={d.isStill ? '움직임 끔' : '움직임 켬'} onPress={() => act.toggleStill()} />
+        {hasMotion ? [<Button key="still" plain label={d.isStill ? '움직임 끔' : '움직임 켬'} onPress={() => act.toggleStill()} />] : []}
         {mark(ui, d, act, 'scene')}
       </Box>,
       ...cardOf(ui, d, 'scene'),
@@ -94,7 +95,7 @@ const settings = (ui: Ui, d: PanelData, act: Actions) => {
 }
 
 /** 한도 정보가 비어 있을 때만 이유를 알려 준다. 원이 무엇을 뜻하는지는 "?"에 있다. */
-const usageNotes = (ui: Ui, d: PanelData) => {
+const usageNotes = (ui: CommonUi, d: PanelData) => {
   const { Text } = ui
   const note =
     d.usage === null ? '첫 응답이 끝나면 채워져요' : d.usage.limits.length === 0 ? '아직 받은 한도 정보가 없어요' : ''
@@ -140,7 +141,7 @@ const usage = (ui: Ui, d: PanelData, act: Actions) => {
 }
 
 /** 숫자 칸: 모든 칸이 같은 폭을 나눠 쓰고, 숫자는 자릿수가 달라도 자리가 흔들리지 않는다(tabular). */
-const counter = (ui: Ui, d: PanelData, value: number, label: string) => {
+const counter = (ui: CommonUi, d: PanelData, value: number, label: string) => {
   const { Box, Text } = ui
 
   return (
@@ -163,7 +164,7 @@ const statusSummary = (d: PanelData): string => {
 }
 
 /** 영역 3: 작업 현황. 프로젝트 이름(주요) · git 상태(칩) · 오늘 누적 숫자 세 칸. */
-const status = (ui: Ui, d: PanelData, act: Actions) => {
+export const status = (ui: CommonUi, d: PanelData, act: Actions) => {
   const { Box, Text } = ui
   const t = d.today.date === todayKey(d.now) ? d.today : { ...d.today, prompts: 0, actions: 0, files: [] }
   const folded = isFolded(d, 'status')
@@ -205,7 +206,7 @@ const status = (ui: Ui, d: PanelData, act: Actions) => {
  * 영역 4: 이 채팅에서 만진 파일(프로젝트의 상세). 기본은 최근 4개, "전체 보기"로 모두 펼친다.
  * 위 "수정 파일"(오늘 누적)과는 다른 값이라 제목과 개수에 "이 채팅"을 적는다. 길면 가로로 넘치지 않게 잘라 낸다.
  */
-const files = (ui: Ui, d: PanelData, act: Actions) => {
+export const files = (ui: CommonUi, d: PanelData, act: Actions) => {
   const { Box, Button, Text } = ui
   const recent = [...d.chatFiles].reverse()
   const shown = d.isFilesOpen ? recent : recent.slice(0, FILES_COLLAPSED)
