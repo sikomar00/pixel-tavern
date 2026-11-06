@@ -320,11 +320,11 @@ test('[상태] 구역을 접으면 머리글 한 줄과 요약만 남고, 편 �
   expect(await has(/^오늘 누적$/)).toBe(false)
   await pane.press({ key: 'fold:usage' })
   expect(await svgs()).toBe(1)
-  expect(store.collapsed).toEqual(['art', 'status', 'files', 'music']) // 저장소에 남는다
+  expect(store.collapsed).toEqual(['art', 'status', 'files', 'music', 'timeline']) // 저장소에 남는다(이 기능이 생기기 전의 목록에는 작업 기록 줄이 접힌 채로 더해진다)
   await pane.press({ key: 'fold:art' })
   expect(await svgs()).toBe(2)
   await pane.press({ key: 'fold:music' })
   expect(await pane.find({ key: 'radio' })).toBeDefined()
-  expect(store.collapsed).toEqual(['status', 'files'])
+  expect(store.collapsed).toEqual(['status', 'files', 'timeline'])
   await pane.unmount()
 })
