@@ -25,6 +25,7 @@ import {
 import { countAction, countPrompt, readProjects, readToday } from './stats'
 import { readFavorites, readStationTab } from './stations'
 import { TERMINAL_BANNER_ROWS, termBanner, termPanelView } from './term'
+import { noteTurnFile, readTimeline, recordPrompt, recordTurnEnd, resetTurnFiles } from './timeline'
 import { readTodos } from './todos'
 import { beginTurn, endTurn, readWork } from './work'
 
@@ -41,7 +42,10 @@ const ALERT_MS = 8000
 
 /** 거부되거나 실패하지 않고 끝난 호출의 파일만 기록한다. 엔진의 검사 때문에 `$`를 받는 함수는 파일 맨 위에 둔다. */
 const trackIfDone = async ($: EngineInterface, ran: { deny?: unknown; isError?: boolean }, path: unknown): Promise<void> => {
-  if (ran.deny === undefined && ran.isError !== true && typeof path === 'string') await trackFile($, path)
+  if (ran.deny === undefined && ran.isError !== true && typeof path === 'string') {
+    await trackFile($, path)
+    noteTurnFile(path) // 이 턴에 고친 파일 수(지문으로 메모리에만)
+  }
 }
 
 export const register: Register = on => {
@@ -94,7 +98,10 @@ export const register: Register = on => {
   // 빠른 실행 버튼의 진행 상태: 버튼을 누른 뒤 처음 시작하는 메인 대화의 턴을 따라간다(서브에이전트의 턴은 건너뛴다).
   // 모델의 답(answer)이나 프롬프트 글(text)은 읽지 않는다.
   on('turn.start', async ($, e, next) => {
-    if (e.agentId === undefined) await beginTurn($, e.turnId)
+    if (e.agentId === undefined) {
+      resetTurnFiles()
+      await beginTurn($, e.turnId)
+    }
 
     return next(e)
   })
@@ -102,7 +109,10 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
 
-    if (e.agentId === undefined) await endTurn($, e)
+    if (e.agentId === undefined) {
+      await endTurn($, e)
+      await recordTurnEnd($, e.reason) // 오늘 작업 기록: 시각·종류·고친 파일 수만
+    }
 
     return done
   })
@@ -116,6 +126,7 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     await countPrompt($)
+    await recordPrompt($)
 
     return next(e)
   })
@@ -207,7 +218,8 @@ export const register: Register = on => {
       )
     }
     const frame = { columns: e.props.bodyColumns, rows: e.props.scroll.bodyRows, placement: e.props.placement, surface: e.surface }
-    const view = { ...(await readView($)), ...(await readPanel($)), today: await readToday($), projects: await readProjects($), favorites: await readFavorites($), stationTab: await readStationTab($), todos: await readTodos($), work: await readWork($), frame }
+    const timeline = await readTimeline($)
+    const view = { ...(await readView($)), ...(await readPanel($)), today: await readToday($), projects: await readProjects($), favorites: await readFavorites($), stationTab: await readStationTab($), todos: await readTodos($), work: await readWork($), timeline: timeline.entries, timelineCount: timeline.count, frame }
 
     return e.surface === 'terminal' ? termPanelView(ui as Elements['terminal'], view, makeActions($)) : panelView(ui as Elements['desktop'], view, makeActions($))
   })

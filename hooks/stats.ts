@@ -69,7 +69,7 @@ export const byProject = (day: string, parts: Today[], limit = PROJECTS_MAX): Pr
 }
 
 /** 이 채팅의 칸 이름. 한 번 정하면 모드를 다시 불러와도 같다($.state에 남는다). 앱을 다시 켜면 새로 정한다(앞 칸은 저장소에 남아 합계에 든다). */
-async function ownSlot($: EngineInterface): Promise<string> {
+export async function ownSlot($: EngineInterface): Promise<string> {
   const made = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
   await update($, slot, id => (id === '' ? made : id))

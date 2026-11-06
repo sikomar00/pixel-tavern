@@ -2,7 +2,8 @@ import type { EngineInterface } from 'claude-code'
 
 import type { RadioState, SceneId } from '../types'
 import { readStation } from './stations'
-import { failRadio, noteRadio, readRadio, readVolume, writeMusicAvailable, writeRadio, yieldRadio } from './state'
+import { failRadio, noteRadio, readRadio, readVolume, writeMusicAvailable, writeRadio, writeTitle, yieldRadio } from './state'
+import { fetchTitle } from './title'
 import { gainOf } from './volume'
 
 const MARKER = 'pixel-tavern-radio'
@@ -60,7 +61,7 @@ while ($true) {
 }
 `
 
-type Playback = { isStopped: boolean; stream: string; gain: string }
+type Playback = { isStopped: boolean; stream: string; gain: string; isTitleLoop: boolean }
 
 // 이 채팅에서 지금 도는 재생. 모드를 다시 불러오면 자식 프로세스도 함께 끝나므로 null에서 다시 시작한다.
 let current: Playback | null = null
@@ -93,6 +94,24 @@ async function warnIfStillConnecting($: EngineInterface, playback: Playback): Pr
   $.ui.toast('방송에 아직 연결하지 못했어요. ■로 끄고 ⟳로 다른 장면의 방송을 써 보세요')
 }
 
+const TITLE_FIRST_MS = 3_000 // 소리가 나오기 시작한 뒤 처음 제목을 읽기까지
+const TITLE_EVERY_MS = 30_000 // 그 뒤로 제목을 다시 읽는 간격(곡은 보통 몇 분이라 이 정도면 충분하고, 방송에 자주 접속하지 않는다)
+
+/** 소리가 나오는 동안 곡 제목을 읽어 보인다. 제목을 못 읽어도(방송이 안 보내거나 접속 실패) 재생에는 영향이 없고, 못 읽은 차례는 건너뛴다. */
+async function followTitle($: EngineInterface, playback: Playback): Promise<void> {
+  await $.clock.sleep(TITLE_FIRST_MS)
+  while (!playback.isStopped) {
+    try {
+      const title = await fetchTitle($, playback.stream, LAUNCH)
+
+      await writeTitle($, title ?? '', () => playback.isStopped) // 제목을 안 보내는 방송이면 빈 글자(보이지 않는다)
+    } catch (error) {
+      $.ui.log(`pixel-tavern: title lookup skipped: ${String(error)}`, { to: 'debug' })
+    }
+    await $.clock.sleep(TITLE_EVERY_MS)
+  }
+}
+
 async function listen($: EngineInterface, playback: Playback): Promise<void> {
   let lastError = ''
   let isSettled = false // 실패·가로채임으로 상태를 이미 정했다
@@ -121,6 +140,10 @@ async function listen($: EngineInterface, playback: Playback): Promise<void> {
       const status = statusOf(text)
 
       if (status !== null) await writeRadio($, status, isStale)
+      if (status === 'playing' && !playback.isTitleLoop) {
+        playback.isTitleLoop = true // 다시 연결해 또 playing이 와도 조회 반복은 하나만
+        void followTitle($, playback).catch(() => undefined) // 기다림 중에 모드가 내려가면(정상) 기다림이 중단돼 거부된다: 반복이 끝날 뿐이다. 조회 실패는 반복 안에서 이미 기록한다
+      }
       const retry = /retry:(\d+)/.exec(text)
 
       // 다시 연결하는 중이라는 안내는 "연결 중" 상태를 쓴 다음에 붙인다(상태를 쓰면 옛 안내가 지워진다).
@@ -153,7 +176,7 @@ export async function startRadio($: EngineInterface, sceneId: SceneId): Promise<
   const gain = gainOf(await readVolume($)) // 기다림은 옛 재생을 멈추기 전에 끝낸다: 사이에 다른 시작이 끼어들지 못하게
   const { stream } = await readStation($, sceneId)
   if (current !== null) current.isStopped = true
-  const playback: Playback = { isStopped: false, stream, gain }
+  const playback: Playback = { isStopped: false, stream, gain, isTitleLoop: false }
 
   current = playback
   await $.store.set('radioOwner', CHAT_ID)

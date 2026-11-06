@@ -37,6 +37,15 @@ export type ProjectToday = Today & { project: string }
 /** 할 일 하나. done은 완료(체크), star는 우선 표시. 목록은 새로 더한 것이 맨 앞이다. */
 export type Todo = { id: string; text: string; done: boolean; star: boolean }
 
+/** 오늘 작업 기록의 종류: 프롬프트를 보냄 · 작업이 끝남 · 작업이 중단됨(사용자가 멈춤·오류·거절). */
+export type TimelineKind = 'prompt' | 'done' | 'stopped'
+
+/** 오늘 작업 기록의 한 줄: 언제(밀리초), 어떤 일, 그 턴에 고친 파일 수. 파일 이름·경로와 프롬프트·답 글은 담지 않는다. */
+export type TimelineEntry = { at: number; kind: TimelineKind; files?: number }
+
+/** 한 채팅의 오늘 기록. date가 오늘과 다르면 지난 기록이다. */
+export type TimelineDay = { date: string; entries: TimelineEntry[] }
+
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
 
 export type Usage = {
@@ -76,6 +85,8 @@ declare module 'claude-code' {
       favoriteStations: string[]
       stationTab: string
       todos: Todo[]
+      timelineOwn: TimelineDay
+      timelineOthers: TimelineEntry[]
       usage: Usage | null
       git: Shaped<GitInfo | null>
       model: string | null
@@ -87,6 +98,7 @@ declare module 'claude-code' {
       tick: number
       radio: RadioState
       radioNote: string
+      songTitle: string
       volume: number
       isFilesOpen: boolean
       isPickerOpen: boolean

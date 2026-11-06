@@ -91,6 +91,13 @@ const nowPlaying = (ui: Ui, d: PanelData) => {
         </Text>
       </Box>
     </Box>,
+    ...(d.radio === 'playing' && d.songTitle !== ''
+      ? [
+          <Text color={d.scene.accent} size="footnote" wrap="truncate-end">
+            {`♪ ${d.songTitle}`}
+          </Text>,
+        ]
+      : []),
     ...((isFailed || d.radio === 'connecting') && d.radioNote !== ''
       ? [
           <Text color={d.scene.muted} size="caption">
@@ -102,7 +109,7 @@ const nowPlaying = (ui: Ui, d: PanelData) => {
 }
 
 /**
- * 영역 5: 음악 플레이어. 평소에는 세 줄: ① 방송 이름과 상태 ② 재생·정지와 음량 ③ "방송 바꾸기"와 "즐겨찾기".
+ * 영역 5: 음악 플레이어. 평소에는 세 줄: ① 방송 이름과 상태(소리가 나오는 중이고 곡 제목을 알면 그 아래에 `♪ 제목` 한 줄) ② 재생·정지와 음량 ③ "방송 바꾸기"와 "즐겨찾기".
  * 방송 고르기(묶음 버튼 + 방송 버튼)는 "방송 바꾸기"를 눌러야 펼쳐진다. 실패하면 이유가 한 줄 붙고 버튼이 "다시 시도"가 된다
  * (다시 연결하는 중에도 몇 번째 시도인지 한 줄 붙는다). 구역을 접으면 상태 한 줄만 남는다(배너 ▶/■로 계속 조작할 수 있다).
  */

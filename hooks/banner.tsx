@@ -20,6 +20,8 @@ export type BannerData = {
   project: string
   now: number
   radio: RadioState
+  /** 지금 나오는 곡의 제목(소리가 나오는 중일 때만, 모르면 빈 글자). 화면에만 보이고 저장하지 않는다. */
+  songTitle: string
   isMusicAvailable: boolean
   /** 참이면 그림이 움직이지 않는다(패널의 "움직임" 버튼). */
   isStill: boolean
@@ -81,8 +83,8 @@ const gaugeSvg = (x: number, g: Gauge, scene: Scene): string => {
 }
 
 /** 배너 둘째 줄 왼쪽: 평소엔 장면의 한마디, 음악이 켜져 있으면 지금 나오는 방송. */
-export const noteOf = ({ scene, radio }: BannerData): { text: string; color: string } => {
-  if (radio === 'playing') return { text: `♪ ${scene.music.label}`, color: scene.accent }
+export const noteOf = ({ scene, radio, songTitle }: BannerData): { text: string; color: string } => {
+  if (radio === 'playing') return { text: `♪ ${songTitle === '' ? scene.music.label : songTitle}`, color: scene.accent } // 곡 제목을 알면 제목, 아니면 방송 이름
   if (radio === 'connecting') return { text: '♪ 연결 중…', color: scene.accent }
   if (radio === 'failed') return { text: '♪ 연결 실패 · ▶로 다시', color: WARN_COLOR }
   if (radio === 'other') return { text: '♪ 다른 채팅에서 재생 중', color: scene.muted }

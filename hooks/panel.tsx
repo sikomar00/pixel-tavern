@@ -1,6 +1,6 @@
 import type { Elements } from 'claude-code'
 
-import type { ProjectToday, QuickKey, Todo, Today, Work } from '../types'
+import type { ProjectToday, QuickKey, TimelineEntry, Todo, Today, Work } from '../types'
 import type { Actions } from './actions'
 import { ART, composeScene } from './art'
 import type { BannerData } from './banner'
@@ -15,6 +15,7 @@ import { quick } from './quick'
 import { MODES } from './scenes'
 import { stillSvg } from './still'
 import { SPACE, chipOf } from './theme'
+import { timelineRows } from './timelinerows'
 import type { Ui as CommonUi } from './theme'
 import { todo } from './todo'
 import { USAGE_HEIGHT, usageSummary, usageSvg, usageWidthFor } from './usage'
@@ -29,6 +30,8 @@ export type PanelData = BannerData & {
   favorites: string[]
   stationTab: string
   todos: Todo[]
+  timeline: TimelineEntry[]
+  timelineCount: number
   chatFiles: string[]
   isFilesOpen: boolean
   isPickerOpen: boolean
@@ -204,6 +207,7 @@ export const status = (ui: CommonUi, d: PanelData, act: Actions) => {
               {counter(ui, d, t.files.length, '수정 파일')}
             </Box>,
             ...projectRows(ui, d, act),
+            ...timelineRows(ui, d, act),
           ]),
         ]),
   ])

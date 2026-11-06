@@ -8,13 +8,17 @@ import { DEFAULT_MOOD, MODES, SCENES } from './scenes'
 import { addTouchedFile, setOwnProject, syncStats } from './stats'
 import { loadStations, readStation } from './stations'
 import { loadTodos } from './todos'
+import { syncTimeline } from './timeline'
 import { DEFAULT_VOLUME, isVolume } from './volume'
 
 // 엔진의 검사(claude plugin validate)는 atom을 읽고 쓰는 파일 안에서 atom을 찾는다.
 // 그래서 atom은 이 파일에만 두고, 바깥에는 `$`를 받는 함수로만 드러낸다.
 // 모양을 바꾸면 shape 태그를 올린다. 이전 버전이 저장한 값은 기본값으로 읽힌다.
 /** 접어 둔 구역(처음 한 번만 쓰는 기본값). art·usage·status·files·music은 구역, commits는 작업 현황의 커밋 로그, changes는 바뀐 파일 목록, projects는 프로젝트별 오늘. */
-const DEFAULT_COLLAPSED: string[] = ['commits', 'changes', 'projects']
+const DEFAULT_COLLAPSED: string[] = ['commits', 'changes', 'projects', 'timeline']
+// 새로 생긴 "기본은 접힘" 항목: 접기 설정을 이미 저장해 둔 사용자에게도 한 번만 접어서 보여 준다(저장된 목록에 없어서 펼쳐지는 것을 막는다).
+// 저장소의 `foldedIntroduced`는 "저장된 목록이 이 항목들을 이미 반영했다"는 표시다(사용자가 펴 둔 것을 다음에 다시 접지 않게).
+const NEW_FOLDED: string[] = ['timeline']
 const mood = atom({ plugin: 'pixel-tavern', key: 'mood' } as const, DEFAULT_MOOD as Mood, { shape: 'mood-1' })
 const isHidden = atom({ plugin: 'pixel-tavern', key: 'isHidden' } as const, false)
 const isStill = atom({ plugin: 'pixel-tavern', key: 'isStill' } as const, false)
@@ -28,6 +32,7 @@ const armedKey = atom({ plugin: 'pixel-tavern', key: 'armedKey' } as const, null
 const tick = atom({ plugin: 'pixel-tavern', key: 'tick' } as const, 0)
 const radio = atom({ plugin: 'pixel-tavern', key: 'radio' } as const, 'off' as RadioState)
 const radioNote = atom({ plugin: 'pixel-tavern', key: 'radioNote' } as const, '')
+const songTitle = atom({ plugin: 'pixel-tavern', key: 'songTitle' } as const, '') // 지금 나오는 곡 제목(화면에만 보이고 저장하지 않는다)
 const volume = atom({ plugin: 'pixel-tavern', key: 'volume' } as const, DEFAULT_VOLUME)
 const isFilesOpen = atom({ plugin: 'pixel-tavern', key: 'isFilesOpen' } as const, false)
 const isPickerOpen = atom({ plugin: 'pixel-tavern', key: 'isPickerOpen' } as const, false) // 음악의 방송 고르기(처음엔 접힘, 저장하지 않는다)
@@ -68,22 +73,34 @@ export const toUsage = (u: {
 
 /** 세션이 시작될 때 저장소에서 기분·숨김·움직임·방송 선택·오늘 통계·음량을 불러온다. 모양이 틀린 값은 버린다. */
 export async function loadStored($: EngineInterface): Promise<void> {
-  const [m, hidden, still, level, saved] = await Promise.all([
+  const [m, hidden, still, level, saved, introduced] = await Promise.all([
     $.store.get('mood'),
     $.store.get('isHidden'),
     $.store.get('isStill'),
     $.store.get('volume'),
     $.store.get('collapsed'),
+    $.store.get('foldedIntroduced'),
   ])
 
   if (isMood(m)) await update($, mood, () => m)
   if (typeof hidden === 'boolean') await update($, isHidden, () => hidden)
   if (typeof still === 'boolean') await update($, isStill, () => still)
   if (isVolume(level)) await update($, volume, () => level)
-  if (isStringList(saved)) await update($, collapsed, () => saved)
+  if (isStringList(saved)) {
+    const done = isStringList(introduced) ? introduced : []
+    const fresh = NEW_FOLDED.filter(id => !done.includes(id) && !saved.includes(id))
+    const folded = [...saved, ...fresh]
+
+    await update($, collapsed, () => folded)
+    if (NEW_FOLDED.some(id => !done.includes(id))) {
+      await $.store.set('collapsed', folded)
+      await $.store.set('foldedIntroduced', [...new Set([...done, ...NEW_FOLDED])])
+    }
+  }
   await loadStations($)
   await loadTodos($)
   await syncStats($) // 오늘 통계: 다른 채팅과 앞선 실행이 남긴 칸을 읽어 둔다
+  await syncTimeline($) // 오늘 작업 기록도 같은 방식으로
 }
 
 /** 처음 한 번만 true. 안내 문구를 한 번만 보여 주려는 용도. */
@@ -114,7 +131,7 @@ export async function noteStep($: EngineInterface, modelId: string, level: strin
 
 /** git·한도·모델·오늘 통계·할 일을 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
 export async function refresh($: EngineInterface): Promise<void> {
-  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncStats($), loadTodos($)])
+  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncStats($), syncTimeline($), loadTodos($)])
 
   await update($, usage, () => toUsage(snapshot))
   await update($, model, () => modelId)
@@ -123,7 +140,7 @@ export async function refresh($: EngineInterface): Promise<void> {
 
 /** 배너와 패널이 함께 쓰는 값. 그리는 중에 부르면 값이 바뀔 때 다시 그려진다. */
 export async function readView($: EngineInterface) {
-  const [m, u, g, mdl, eff, proj, now, rad, note, canPlay, still] = await Promise.all([
+  const [m, u, g, mdl, eff, proj, now, rad, note, title, canPlay, still] = await Promise.all([
     read($, mood),
     read($, usage),
     read($, git),
@@ -133,6 +150,7 @@ export async function readView($: EngineInterface) {
     $.clock.now(),
     read($, radio),
     read($, radioNote),
+    read($, songTitle),
     read($, isMusicAvailable),
     read($, isStill),
     read($, tick), // 1분마다 남은 시간 표시를 다시 그리게 한다
@@ -141,7 +159,7 @@ export async function readView($: EngineInterface) {
   const base = SCENES[currentSceneId(m)]
 
   // 배너·패널은 장면의 music을 그대로 읽는다: 고른 방송이 있으면 그것으로 바꿔 끼운다.
-  return { scene: { ...base, music: await readStation($, base.id) }, usage: u, git: g, model: mdl, effort: eff, project: proj, now, radio: rad, radioNote: note, isMusicAvailable: canPlay, isStill: still }
+  return { scene: { ...base, music: await readStation($, base.id) }, usage: u, git: g, model: mdl, effort: eff, project: proj, now, radio: rad, radioNote: note, songTitle: title, isMusicAvailable: canPlay, isStill: still }
 }
 
 export async function readPanel($: EngineInterface) {
@@ -248,6 +266,7 @@ export function readCollapsed($: EngineInterface): Promise<string[]> {
 export async function writeCollapsed($: EngineInterface, ids: string[]): Promise<void> {
   await update($, collapsed, () => ids)
   await $.store.set('collapsed', ids)
+  await $.store.set('foldedIntroduced', NEW_FOLDED) // 사용자가 정한 목록이다: 새 항목을 다시 접지 않는다
 }
 
 export function readOpenHelp($: EngineInterface): Promise<string> {
@@ -282,6 +301,13 @@ export async function noteRadio($: EngineInterface, note: string, isStale: () =>
 export async function writeRadio($: EngineInterface, next: RadioState, isStale: () => boolean = () => false): Promise<void> {
   await update($, radio, current => (isStale() ? current : next))
   if (next !== 'failed' && !isStale()) await update($, radioNote, () => '') // 새 시도는 옛 실패 이유를 지운다
+  if (next !== 'playing' && !isStale()) await update($, songTitle, () => '') // 소리가 나오지 않으면 곡 제목도 없다(방송을 바꾸거나 끄면 지워진다)
+}
+
+/** 지금 곡의 제목을 보인다. 소리가 나오는 중(playing)이 아니거나 이미 멈춘 재생이면 무시한다. 저장소에는 쓰지 않는다. */
+export async function writeTitle($: EngineInterface, title: string, isStale: () => boolean = () => false): Promise<void> {
+  if (isStale() || (await read($, radio)) !== 'playing') return
+  await update($, songTitle, () => title)
 }
 
 export async function writeVolume($: EngineInterface, level: number): Promise<void> {

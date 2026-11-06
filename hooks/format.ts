@@ -57,6 +57,13 @@ export const fmtReset = (iso: string | undefined, now: number): string => {
 export const isPast = (iso: string | undefined, now: number): boolean => iso !== undefined && Date.parse(iso) <= now
 
 /** 자정이 지나면 값이 바뀌는 날짜 키(기기 시간대). */
+/** 시각을 `14:05`로(이 컴퓨터의 시간대). */
+export const fmtClock = (ms: number): string => {
+  const d = new Date(ms)
+
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 export const todayKey = (ms: number): string => {
   const d = new Date(ms)
 
