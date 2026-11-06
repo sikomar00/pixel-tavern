@@ -6,7 +6,7 @@ import { ART, composeScene } from './art'
 import type { BannerData } from './banner'
 import { diagBoard } from './diag'
 import type { Frame } from './diag'
-import { shortPath, todayKey } from './format'
+import { shortModel, shortPath, todayKey } from './format'
 import { gitRows } from './gitrows'
 import { STRIPE_COLUMNS, band, card, cardOf, chevron, header, inset, isFolded, mark, summary } from './layout'
 import { music } from './music'
@@ -185,6 +185,13 @@ export const status = (ui: CommonUi, d: PanelData, act: Actions) => {
             <Text size="heading" weight="semibold" wrap="truncate-end">
               {d.project === '' ? '-' : d.project}
             </Text>,
+            ...(d.model === null
+              ? []
+              : [
+                  <Text color={d.scene.muted} size="footnote" wrap="truncate-end">
+                    {`모델 ${shortModel(d.model)} · effort ${d.effort ?? '-'}`}
+                  </Text>,
+                ]),
             ...gitRows(ui, d, act),
           ]),
           inset(ui, [

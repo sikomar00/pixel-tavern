@@ -31,6 +31,10 @@ export const shortModel = (id: string): string => {
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
+/** 배너·패널에 쓰는 모델 한 줄: `Sonnet 5.5 · high`(effort를 모르면 모델만, 모델을 모르면 빈 글자). */
+export const modelText = (model: string | null, effort: string | null): string =>
+  model === null ? '' : [shortModel(model), ...(effort === null ? [] : [effort])].join(' · ')
+
 export const fmtTokens = (n: number): string => `${Math.round(n / 1000)}k`
 
 /** 리셋까지 남은 시간을 짧게: `2d 3h`, `1h 37m`, `12m`. */

@@ -79,6 +79,7 @@ declare module 'claude-code' {
       usage: Usage | null
       git: Shaped<GitInfo | null>
       model: string | null
+      effort: string | null
       project: string
       chatFiles: string[]
       armedKey: QuickKey | null

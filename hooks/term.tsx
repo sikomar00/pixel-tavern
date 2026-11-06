@@ -5,7 +5,7 @@ import { CELLS } from './art/cells'
 import { RADIO_ICON, gaugesOf as bannerGauges, noteOf } from './banner'
 import type { BannerData } from './banner'
 import { emblemPicture, hexToInt, scenePicture } from './cells'
-import { shortModel } from './format'
+import { modelText } from './format'
 import { card, chevron, header, inset, isFolded, mark, summary, cardOf } from './layout'
 import { music } from './music'
 import { files, settings, status } from './panel'
@@ -71,7 +71,7 @@ const bannerGauge = (ui: TermUi, d: BannerData, g: { name: string; percent: numb
 }
 
 /**
- * 터미널 배너(다섯 줄): 왼쪽에 장면의 엠블럼 그림, 오른쪽에 ① 장면 이름과 버튼 ② 방송·모토와 프로젝트·브랜치·모델 ③~⑤ 게이지 셋.
+ * 터미널 배너(다섯 줄): 왼쪽에 장면의 엠블럼 그림, 오른쪽에 ① 장면 이름·모델·effort와 버튼 ② 방송·모토와 프로젝트 이름·브랜치 ③~⑤ 게이지 셋.
  * 숨기면 한 줄(`▣ 여관` + 사용량 요약 + 켜져 있을 때의 음악 버튼)만 남는다. 데스크톱 배너와 같은 버튼(▶ ▤ ⟳ ✕)을 둔다.
  */
 export const termBanner = (ui: TermUi, d: BannerData & { isHidden: boolean }, act: Actions) => {
@@ -90,16 +90,25 @@ export const termBanner = (ui: TermUi, d: BannerData & { isHidden: boolean }, ac
   const emblem = emblemPicture(CELLS[d.scene.id], hexToInt(d.scene.base))
   const note = noteOf(d)
   const branch = d.git === null ? '' : `${d.git.branch}${d.git.changed > 0 ? ` +${d.git.changed}` : ''}`
-  const where = [d.project === '' ? '-' : d.project, branch, d.model === null ? '' : shortModel(d.model)].filter(Boolean).join(' · ')
+  const model = modelText(d.model, d.effort)
 
   return (
     <Box flexDirection="row" gap={2}>
       <Raster key="emblem" columns={emblem.columns} rows={emblem.rows} cells={emblem.cells} />
       <Box flexDirection="column" flexGrow={1}>
         <Box flexDirection="row" justifyContent="space-between" gap={2}>
-          <Text color={d.scene.accent} weight="semibold" wrap="truncate-end">
-            {d.scene.title}
-          </Text>
+          <Box flexDirection="row" gap={2} flexShrink={1}>
+            <Text color={d.scene.accent} weight="semibold" wrap="truncate-end">
+              {d.scene.title}
+            </Text>
+            {model === ''
+              ? []
+              : [
+                  <Text color={d.scene.muted} wrap="truncate-end">
+                    {model}
+                  </Text>,
+                ]}
+          </Box>
           <Box flexDirection="row" gap={1}>
             {d.isMusicAvailable ? [musicButton] : []}
             <Button key="panel" plain label="▤" onPress={() => act.openPanel()} />
@@ -111,9 +120,18 @@ export const termBanner = (ui: TermUi, d: BannerData & { isHidden: boolean }, ac
           <Text color={note.color} wrap="truncate-end">
             {note.text}
           </Text>
-          <Text color={d.scene.muted} wrap="truncate-end">
-            {where}
-          </Text>
+          <Box flexDirection="row" gap={1} flexShrink={1}>
+            <Text weight="semibold" wrap="truncate-end">
+              {d.project === '' ? '-' : d.project}
+            </Text>
+            {branch === ''
+              ? []
+              : [
+                  <Text color={d.scene.muted} wrap="truncate-end">
+                    {`· ${branch}`}
+                  </Text>,
+                ]}
+          </Box>
         </Box>
         <Box flexDirection="row" gap={2}>
           {bannerGauges(d).map(g => bannerGauge(ui, d, g))}

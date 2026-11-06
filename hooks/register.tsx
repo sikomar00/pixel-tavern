@@ -9,6 +9,7 @@ import { baseName } from './format'
 import { panelView } from './panel'
 import {
   loadStored,
+  noteStep,
   readHidden,
   readPanel,
   readView,
@@ -104,6 +105,13 @@ export const register: Register = on => {
     if (e.agentId === undefined) await endTurn($, e)
 
     return done
+  })
+
+  // 모델과 effort: 메인 대화가 모델 요청을 보내기 직전의 값을 기억한다(서브에이전트의 요청은 건너뛴다). 응답은 건드리지 않고 그대로 통과시킨다.
+  on('turn.step', async function* ($, e, next) {
+    if (e.agentId === undefined) await noteStep($, e.model, e.effort)
+
+    return yield* next(e)
   })
 
   on('prompt.submit', async ($, e, next) => {

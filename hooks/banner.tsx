@@ -3,7 +3,7 @@ import type { Elements } from 'claude-code'
 import type { GitInfo, RadioState, Usage } from '../types'
 import type { Actions } from './actions'
 import { ART } from './art'
-import { fmtReset, fmtTokens, isPast, shortModel } from './format'
+import { fmtReset, fmtTokens, isPast, modelText } from './format'
 import { GAUGE_NAMES } from './scenes'
 import type { Scene } from './scenes'
 import { stillSvg } from './still'
@@ -15,6 +15,8 @@ export type BannerData = {
   usage: Usage | null
   git: GitInfo | null
   model: string | null
+  /** 마지막 모델 요청의 effort(low·medium·high·xhigh·max 또는 예산). 첫 요청 전에는 null. */
+  effort: string | null
   project: string
   now: number
   radio: RadioState
@@ -26,7 +28,7 @@ export type BannerData = {
 type Gauge = { name: string; percent: number | null; sub: string }
 
 const BAR_WIDTH = 24
-const GAUGE_X = [84, 111, 138] // 배너 칸 좌표(190칸 = 760px). 162칸 뒤 오른쪽은 버튼 2x2 자리.
+const GAUGE_X = [90, 117, 144] // 배너 칸 좌표(190칸 = 760px). 168칸 뒤 오른쪽은 버튼 2x2 자리. 모델·effort 글자가 들어갈 자리를 위해 게이지를 6칸 오른쪽에 둔다.
 // 배너는 760px 그대로 그려지는데 예전 작은 글자(8~10px)는 읽기 어려웠다. 칸 안에서 가능한 크게 쓴다.
 const LABEL_SIZE = 2.8
 const PERCENT_SIZE = 3.3
@@ -90,15 +92,15 @@ export const noteOf = ({ scene, radio }: BannerData): { text: string; color: str
 
 /** 배너 배경 그림 위에 글자와 게이지를 얹은 SVG(760x48). */
 export const bannerSvg = (d: BannerData): string => {
-  const { scene, git, model, project } = d
+  const { scene, git, project } = d
   const branch = git === null ? '' : `${git.branch}${git.changed > 0 ? ` +${git.changed}` : ''}`
-  const line2 = [branch, model === null ? '' : shortModel(model)].filter(Boolean).join(' · ')
+  const line2 = [modelText(d.model, d.effort), branch].filter(Boolean).join(' · ') // 모델·effort를 먼저: 길면 뒤(브랜치)가 잘린다
   const note = noteOf(d)
   const overlay =
     svgText(15, 5.4, scene.title, 3.6, scene.accent, 800) +
     svgText(15, ROW2_Y, clipWidth(note.text, 2.7, 36), 2.7, note.color) +
-    svgText(54, 5.4, clipWidth(project === '' ? '-' : project, 3.1, 27), 3.1, '#f0f0f5', 700) +
-    svgText(54, ROW2_Y, clipWidth(line2, 2.7, 28), 2.7, scene.muted) +
+    svgText(54, 5.4, clipWidth(project === '' ? '-' : project, 3.1, 33), 3.1, '#f0f0f5', 700) +
+    svgText(54, ROW2_Y, clipWidth(line2, 2.6, 36), 2.6, scene.muted) +
     gaugesOf(d)
       .map((g, i) => gaugeSvg(GAUGE_X[i] ?? 0, g, scene))
       .join('')

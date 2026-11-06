@@ -21,6 +21,7 @@ const isStill = atom({ plugin: 'pixel-tavern', key: 'isStill' } as const, false)
 const usage = atom({ plugin: 'pixel-tavern', key: 'usage' } as const, null)
 const git = atom({ plugin: 'pixel-tavern', key: 'git' } as const, null, { shape: 'git-1' }) // git-1: 바뀐 파일 목록(files)이 생겼다
 const model = atom({ plugin: 'pixel-tavern', key: 'model' } as const, null)
+const effort = atom({ plugin: 'pixel-tavern', key: 'effort' } as const, null) // 마지막 모델 요청의 effort(첫 요청 전에는 모른다)
 const project = atom({ plugin: 'pixel-tavern', key: 'project' } as const, '')
 const chatFiles = atom({ plugin: 'pixel-tavern', key: 'chatFiles' } as const, [])
 const armedKey = atom({ plugin: 'pixel-tavern', key: 'armedKey' } as const, null)
@@ -100,6 +101,17 @@ export async function refreshGit($: EngineInterface): Promise<void> {
   await update($, git, (): GitInfo | null => info)
 }
 
+/**
+ * 메인 대화가 모델 요청을 보내기 직전에 그 요청의 모델과 effort를 기억한다(서브에이전트의 요청은 부르는 쪽이 거른다).
+ * 모델은 1분마다 읽는 값보다 이쪽이 빠르다(/model로 바꾼 다음 요청부터 보인다). 바뀌지 않았으면 다시 그리지 않는다.
+ */
+export async function noteStep($: EngineInterface, modelId: string, level: string | number | undefined): Promise<void> {
+  const next = level === undefined ? null : typeof level === 'number' ? `예산 ${level}` : level
+
+  if ((await read($, model)) !== modelId) await update($, model, () => modelId)
+  if ((await read($, effort)) !== next) await update($, effort, () => next)
+}
+
 /** git·한도·모델·오늘 통계·할 일을 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
 export async function refresh($: EngineInterface): Promise<void> {
   const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncStats($), loadTodos($)])
@@ -111,11 +123,12 @@ export async function refresh($: EngineInterface): Promise<void> {
 
 /** 배너와 패널이 함께 쓰는 값. 그리는 중에 부르면 값이 바뀔 때 다시 그려진다. */
 export async function readView($: EngineInterface) {
-  const [m, u, g, mdl, proj, now, rad, note, canPlay, still] = await Promise.all([
+  const [m, u, g, mdl, eff, proj, now, rad, note, canPlay, still] = await Promise.all([
     read($, mood),
     read($, usage),
     read($, git),
     read($, model),
+    read($, effort),
     read($, project),
     $.clock.now(),
     read($, radio),
@@ -128,7 +141,7 @@ export async function readView($: EngineInterface) {
   const base = SCENES[currentSceneId(m)]
 
   // 배너·패널은 장면의 music을 그대로 읽는다: 고른 방송이 있으면 그것으로 바꿔 끼운다.
-  return { scene: { ...base, music: await readStation($, base.id) }, usage: u, git: g, model: mdl, project: proj, now, radio: rad, radioNote: note, isMusicAvailable: canPlay, isStill: still }
+  return { scene: { ...base, music: await readStation($, base.id) }, usage: u, git: g, model: mdl, effort: eff, project: proj, now, radio: rad, radioNote: note, isMusicAvailable: canPlay, isStill: still }
 }
 
 export async function readPanel($: EngineInterface) {

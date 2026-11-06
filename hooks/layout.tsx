@@ -25,6 +25,21 @@ export const band = (ui: Ui, background: string, children: RenderChildren[]) => 
 /** 카드 왼쪽 강조 막대의 폭(글자 칸 수). 카드 안에 전체 폭 그림을 둘 때는 이만큼 줄여 그린다. */
 export const STRIPE_COLUMNS = 1
 
+const DIVIDER_CELLS = 240 // 카드보다 넓게 긋고 칸 폭에서 잘라 낸다(폭을 몰라도 되게)
+
+/** 터미널 카드 안 묶음 사이의 가는 줄(한 줄 높이, 안쪽 여백만큼 들여 씀). */
+const divider = (ui: Ui, d: PanelData) => {
+  const { Box, Text } = ui
+
+  return (
+    <Box paddingX={SPACE.edge} height={1} overflow="hidden">
+      <Text color={d.scene.muted} dimColor wrap="truncate-end">
+        {'─'.repeat(DIVIDER_CELLS)}
+      </Text>
+    </Box>
+  )
+}
+
 /**
  * 구역 카드: 바탕보다 한 단계 밝은 배경 + 왼쪽 강조 막대. 카드 사이는 패널 바탕(root의 gap)이 비쳐 보여서
  * 어디서 구역이 시작하고 끝나는지 한눈에 보인다. 모든 구역(음악·빠른 실행·할 일·사용량·작업 현황·만진 파일)이 같은 모양이다.
@@ -32,12 +47,14 @@ export const STRIPE_COLUMNS = 1
  */
 export const card = (ui: Ui, d: PanelData, children: RenderChildren[]) => {
   const { Box } = ui
+  // 터미널은 줄 간격을 넓힐 수 없어(세로 간격 0) 묶음이 서로 붙어 보인다: 묶음 사이에 가는 줄을 긋는다.
+  const parts = d.frame.surface === 'terminal' ? children.flatMap((child, index) => (index === 0 ? [child] : [divider(ui, d), child])) : children
 
   return (
     <Box flexDirection="row" alignItems="stretch" backgroundColor={surfaceOf(d.scene)}>
       <Box width={STRIPE_COLUMNS} backgroundColor={d.scene.accent} />
       <Box flexDirection="column" flexGrow={1} paddingY={SPACE.band} gap={SPACE.stack}>
-        {children}
+        {parts}
       </Box>
     </Box>
   )
