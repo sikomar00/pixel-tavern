@@ -1,3 +1,8 @@
 {
-  "extends": "./.claude-plugin/types/tsconfig.json"
+  "extends": "./.claude-plugin/types/tsconfig.json",
+  "compilerOptions": {
+    // 앱에 그때그때 연결된 MCP 서버의 도구 타입(claude-code-mcp)은 빼고 검사한다: 서버 구성이 바뀔 때마다 도구 입력 합집합이 커져
+    // `$.tool.call({ tool: 'Edit', … })` 같은 곳에서 "Type instantiation is excessively deep"(TS2589)가 났다. 이 모드는 MCP 도구를 쓰지 않는다.
+    "types": ["claude-code", "claude-code-tools"]
+  }
 }
