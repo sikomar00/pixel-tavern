@@ -87,7 +87,7 @@ export const termBanner = (ui: TermUi, d: BannerData & { isHidden: boolean }, ac
       </Box>
     )
   }
-  const emblem = emblemPicture(CELLS[d.scene.id], hexToInt(d.scene.base))
+  const emblem = emblemPicture(CELLS[d.scene.id], hexToInt(d.scene.base), d.brightness)
   const note = noteOf(d)
   const branch = d.git === null ? '' : `${d.git.branch}${d.git.changed > 0 ? ` +${d.git.changed}` : ''}`
   const model = modelText(d.model, d.effort)
@@ -190,7 +190,7 @@ const usage = (ui: TermUi, d: PanelData, act: Actions) => {
  */
 export const termPanelView = (ui: TermUi, d: PanelData, act: Actions) => {
   const { Box, Raster } = ui
-  const picture = scenePicture(CELLS[d.scene.id], d.usage?.percent ?? null, d.frame.columns, hexToInt(d.scene.base))
+  const picture = scenePicture(CELLS[d.scene.id], d.usage?.percent ?? null, d.frame.columns, hexToInt(d.scene.base), d.brightness)
 
   return (
     <Box flexDirection="column" backgroundColor={d.scene.base} paddingBottom={SPACE.band} gap={SPACE.band}>

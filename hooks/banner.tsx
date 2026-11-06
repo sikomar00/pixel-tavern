@@ -1,12 +1,13 @@
 import type { Elements } from 'claude-code'
 
-import type { GitInfo, RadioState, Usage } from '../types'
+import type { Brightness, GitInfo, Motion, RadioState, Reaction, Usage } from '../types'
 import type { Actions } from './actions'
 import { ART } from './art'
 import { fmtReset, fmtTokens, isPast, modelText } from './format'
 import { GAUGE_NAMES } from './scenes'
 import type { Scene } from './scenes'
-import { stillSvg } from './still'
+import { REACTION_TEXT, flashSvg, shadeSvg } from './effects'
+import { motionSvg } from './still'
 import { clipWidth, svgText, textWidth, WARN_COLOR, WARN_PERCENT } from './svg'
 import { usageSummary } from './usage'
 
@@ -23,8 +24,12 @@ export type BannerData = {
   /** 지금 나오는 곡의 제목(소리가 나오는 중일 때만, 모르면 빈 글자). 화면에만 보이고 저장하지 않는다. */
   songTitle: string
   isMusicAvailable: boolean
-  /** 참이면 그림이 움직이지 않는다(패널의 "움직임" 버튼). */
-  isStill: boolean
+  /** 효과 강도(패널의 "효과" 버튼): 보통 · 약하게 · 끔. */
+  motion: Motion
+  /** 그림 밝기(패널의 "밝기" 버튼). */
+  brightness: Brightness
+  /** 작업 끝·테스트 결과 반응(잠깐만 있다). 빈 글자면 없다. */
+  reaction: Reaction
 }
 
 type Gauge = { name: string; percent: number | null; sub: string }
@@ -83,7 +88,12 @@ const gaugeSvg = (x: number, g: Gauge, scene: Scene): string => {
 }
 
 /** 배너 둘째 줄 왼쪽: 평소엔 장면의 한마디, 음악이 켜져 있으면 지금 나오는 방송. */
-export const noteOf = ({ scene, radio, songTitle }: BannerData): { text: string; color: string } => {
+export const noteOf = ({ scene, radio, songTitle, reaction }: BannerData): { text: string; color: string } => {
+  if (reaction !== '') {
+    const { text, tone } = REACTION_TEXT[reaction]
+
+    return { text, color: tone === 'bad' ? WARN_COLOR : tone === 'quiet' ? scene.muted : scene.accent } // 반응이 있으면 4초 동안 한마디를 이 문구로 바꾼다
+  }
   if (radio === 'playing') return { text: `♪ ${songTitle === '' ? scene.music.label : songTitle}`, color: scene.accent } // 곡 제목을 알면 제목, 아니면 방송 이름
   if (radio === 'connecting') return { text: '♪ 연결 중…', color: scene.accent }
   if (radio === 'failed') return { text: '♪ 연결 실패 · ▶로 다시', color: WARN_COLOR }
@@ -107,7 +117,9 @@ export const bannerSvg = (d: BannerData): string => {
       .map((g, i) => gaugeSvg(GAUGE_X[i] ?? 0, g, scene))
       .join('')
 
-  return stillSvg(ART[scene.id].strip, d.isStill).replace('</svg>', `${overlay}</svg>`)
+  const effects = shadeSvg(d.brightness, 190, 12) + flashSvg(d.reaction, d.motion, 190, 12) // 띠 그림 위, 글자 아래
+
+  return motionSvg(ART[scene.id].strip, d.motion).replace('</svg>', `${effects}${overlay}</svg>`)
 }
 
 /** SVG를 못 그리는 화면(터미널 등)과 스크린 리더용 한 줄 글자. */

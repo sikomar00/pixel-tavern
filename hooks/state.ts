@@ -1,12 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { GitInfo, Mood, QuickKey, RadioState, SceneId, Usage } from '../types'
+import type { Brightness, GitInfo, Mood, Motion, QuickKey, RadioState, Reaction, SceneId, Usage } from '../types'
+import { BRIGHTNESSES, MOTIONS, isBrightness, isMotion, nextOf } from './effects'
 import { withoutControl } from './format'
 import { readGit } from './git'
 import { DEFAULT_MOOD, MODES, SCENES } from './scenes'
 import { addTouchedFile, setOwnProject, syncStats } from './stats'
 import { loadStations, readStation } from './stations'
+import { loadStreak } from './streak'
 import { loadTodos } from './todos'
 import { syncTimeline } from './timeline'
 import { DEFAULT_VOLUME, isVolume } from './volume'
@@ -21,7 +23,9 @@ const DEFAULT_COLLAPSED: string[] = ['commits', 'changes', 'projects', 'timeline
 const NEW_FOLDED: string[] = ['timeline']
 const mood = atom({ plugin: 'pixel-tavern', key: 'mood' } as const, DEFAULT_MOOD as Mood, { shape: 'mood-1' })
 const isHidden = atom({ plugin: 'pixel-tavern', key: 'isHidden' } as const, false)
-const isStill = atom({ plugin: 'pixel-tavern', key: 'isStill' } as const, false)
+const motion = atom({ plugin: 'pixel-tavern', key: 'motion' } as const, 'full' as Motion) // 효과 강도
+const brightness = atom({ plugin: 'pixel-tavern', key: 'brightness' } as const, 'normal' as Brightness) // 그림 밝기
+const reaction = atom({ plugin: 'pixel-tavern', key: 'reaction' } as const, '' as Reaction) // 작업 끝·테스트 결과 반응(잠깐만 있다, 저장하지 않는다)
 const usage = atom({ plugin: 'pixel-tavern', key: 'usage' } as const, null)
 const git = atom({ plugin: 'pixel-tavern', key: 'git' } as const, null, { shape: 'git-1' }) // git-1: 바뀐 파일 목록(files)이 생겼다
 const model = atom({ plugin: 'pixel-tavern', key: 'model' } as const, null)
@@ -73,9 +77,11 @@ export const toUsage = (u: {
 
 /** 세션이 시작될 때 저장소에서 기분·숨김·움직임·방송 선택·오늘 통계·음량을 불러온다. 모양이 틀린 값은 버린다. */
 export async function loadStored($: EngineInterface): Promise<void> {
-  const [m, hidden, still, level, saved, introduced] = await Promise.all([
+  const [m, hidden, motionStored, brightnessStored, legacyStill, level, saved, introduced] = await Promise.all([
     $.store.get('mood'),
     $.store.get('isHidden'),
+    $.store.get('motion'),
+    $.store.get('brightness'),
     $.store.get('isStill'),
     $.store.get('volume'),
     $.store.get('collapsed'),
@@ -84,7 +90,9 @@ export async function loadStored($: EngineInterface): Promise<void> {
 
   if (isMood(m)) await update($, mood, () => m)
   if (typeof hidden === 'boolean') await update($, isHidden, () => hidden)
-  if (typeof still === 'boolean') await update($, isStill, () => still)
+  if (isMotion(motionStored)) await update($, motion, () => motionStored)
+  else if (legacyStill === true) await update($, motion, () => 'off') // 예전의 "움직임 끔" 설정(불리언)
+  if (isBrightness(brightnessStored)) await update($, brightness, () => brightnessStored)
   if (isVolume(level)) await update($, volume, () => level)
   if (isStringList(saved)) {
     const done = isStringList(introduced) ? introduced : []
@@ -101,6 +109,7 @@ export async function loadStored($: EngineInterface): Promise<void> {
   await loadTodos($)
   await syncStats($) // 오늘 통계: 다른 채팅과 앞선 실행이 남긴 칸을 읽어 둔다
   await syncTimeline($) // 오늘 작업 기록도 같은 방식으로
+  await loadStreak($)
 }
 
 /** 처음 한 번만 true. 안내 문구를 한 번만 보여 주려는 용도. */
@@ -131,7 +140,7 @@ export async function noteStep($: EngineInterface, modelId: string, level: strin
 
 /** git·한도·모델·오늘 통계·할 일을 다시 읽고 화면을 한 번 다시 그리게 한다(남은 시간 표시도 갱신). */
 export async function refresh($: EngineInterface): Promise<void> {
-  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncStats($), syncTimeline($), loadTodos($)])
+  const [snapshot, modelId] = await Promise.all([$.session.usage(), $.session.model(), refreshGit($), syncStats($), syncTimeline($), loadStreak($), loadTodos($)])
 
   await update($, usage, () => toUsage(snapshot))
   await update($, model, () => modelId)
@@ -140,7 +149,7 @@ export async function refresh($: EngineInterface): Promise<void> {
 
 /** 배너와 패널이 함께 쓰는 값. 그리는 중에 부르면 값이 바뀔 때 다시 그려진다. */
 export async function readView($: EngineInterface) {
-  const [m, u, g, mdl, eff, proj, now, rad, note, title, canPlay, still] = await Promise.all([
+  const [m, u, g, mdl, eff, proj, now, rad, note, title, canPlay, mot, bright, react] = await Promise.all([
     read($, mood),
     read($, usage),
     read($, git),
@@ -152,14 +161,16 @@ export async function readView($: EngineInterface) {
     read($, radioNote),
     read($, songTitle),
     read($, isMusicAvailable),
-    read($, isStill),
+    read($, motion),
+    read($, brightness),
+    read($, reaction),
     read($, tick), // 1분마다 남은 시간 표시를 다시 그리게 한다
   ])
 
   const base = SCENES[currentSceneId(m)]
 
   // 배너·패널은 장면의 music을 그대로 읽는다: 고른 방송이 있으면 그것으로 바꿔 끼운다.
-  return { scene: { ...base, music: await readStation($, base.id) }, usage: u, git: g, model: mdl, effort: eff, project: proj, now, radio: rad, radioNote: note, songTitle: title, isMusicAvailable: canPlay, isStill: still }
+  return { scene: { ...base, music: await readStation($, base.id) }, usage: u, git: g, model: mdl, effort: eff, project: proj, now, radio: rad, radioNote: note, songTitle: title, isMusicAvailable: canPlay, motion: mot, brightness: bright, reaction: react }
 }
 
 export async function readPanel($: EngineInterface) {
@@ -212,20 +223,39 @@ export async function writeHidden($: EngineInterface, hidden: boolean): Promise<
 }
 
 /**
- * 움직이는 그림을 멈추거나 다시 움직이게 하고 저장소에 남긴다(다음에 열어도 그대로). 바뀐 뒤의 값을 돌려준다.
- * 값을 읽고 따로 쓰면 거의 동시에 두 번 눌렀을 때 둘 다 같은 값을 읽어 한 번이 사라져서, 바꾸는 순간의 값에서 뒤집는다(시험으로 확인).
+ * 효과 강도를 한 단계 돌리고(보통 → 약하게 → 끔 → 보통) 저장소에 남긴다(다음에 열어도 그대로). 바뀐 뒤의 값을 돌려준다.
+ * 값을 읽고 따로 쓰면 거의 동시에 두 번 눌렀을 때 둘 다 같은 값을 읽어 한 번이 사라져서, 바꾸는 순간의 값에서 돌린다(시험으로 확인).
  */
-export async function toggleStill($: EngineInterface): Promise<boolean> {
-  let next = false
+export async function cycleMotion($: EngineInterface): Promise<Motion> {
+  let next: Motion = 'full'
 
-  await update($, isStill, current => {
-    next = !current
+  await update($, motion, current => {
+    next = nextOf(MOTIONS, current)
 
     return next
   })
-  await $.store.set('isStill', next)
+  await $.store.set('motion', next)
 
   return next
+}
+
+/** 그림 밝기를 한 단계 돌리고(보통 → 밝게 → 어둡게 → 보통) 저장소에 남긴다. 바뀐 뒤의 값을 돌려준다. */
+export async function cycleBrightness($: EngineInterface): Promise<Brightness> {
+  let next: Brightness = 'normal'
+
+  await update($, brightness, current => {
+    next = nextOf(BRIGHTNESSES, current)
+
+    return next
+  })
+  await $.store.set('brightness', next)
+
+  return next
+}
+
+/** 반응을 보이거나(종류) 지운다(빈 글자). 저장하지 않는다. */
+export async function writeReaction($: EngineInterface, next: Reaction): Promise<void> {
+  await update($, reaction, () => next)
 }
 
 export async function writeArmed($: EngineInterface, armed: QuickKey | null): Promise<void> {

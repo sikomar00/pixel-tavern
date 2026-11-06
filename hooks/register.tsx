@@ -23,7 +23,9 @@ import {
   writeUsage,
 } from './state'
 import { countAction, countPrompt, readProjects, readToday } from './stats'
+import { flashReaction, noteTestRun, reactionOfTurn } from './reaction'
 import { readFavorites, readStationTab } from './stations'
+import { readStreak, recordWorkDay } from './streak'
 import { TERMINAL_BANNER_ROWS, termBanner, termPanelView } from './term'
 import { noteTurnFile, readTimeline, recordPrompt, recordTurnEnd, resetTurnFiles } from './timeline'
 import { readTodos } from './todos'
@@ -112,6 +114,7 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       await endTurn($, e)
       await recordTurnEnd($, e.reason) // 오늘 작업 기록: 시각·종류·고친 파일 수만
+      await flashReaction($, reactionOfTurn(e.reason)) // 작업 끝·중단·실패 반응
     }
 
     return done
@@ -127,6 +130,7 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     await countPrompt($)
     await recordPrompt($)
+    await recordWorkDay($) // 연속 기록: 오늘을 일한 날로
 
     return next(e)
   })
@@ -154,6 +158,23 @@ export const register: Register = on => {
     const ran = await next(e)
 
     await trackIfDone($, ran, e.file_path)
+
+    return ran
+  })
+
+  // 테스트 결과 반응: 터미널 명령 도구(Bash·PowerShell)가 끝났을 때 테스트 명령이었으면 통과·실패를 보인다. 도구마다 훅을 따로 쓴다(타입 검사기 메모리).
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const ran = await next(e)
+
+    await noteTestRun($, ran, e.command)
+
+    return ran
+  })
+
+  on('tool.call', { tool: 'PowerShell' }, async ($, e, next) => {
+    const ran = await next(e)
+
+    await noteTestRun($, ran, e.command)
 
     return ran
   })
@@ -219,7 +240,7 @@ export const register: Register = on => {
     }
     const frame = { columns: e.props.bodyColumns, rows: e.props.scroll.bodyRows, placement: e.props.placement, surface: e.surface }
     const timeline = await readTimeline($)
-    const view = { ...(await readView($)), ...(await readPanel($)), today: await readToday($), projects: await readProjects($), favorites: await readFavorites($), stationTab: await readStationTab($), todos: await readTodos($), work: await readWork($), timeline: timeline.entries, timelineCount: timeline.count, frame }
+    const view = { ...(await readView($)), ...(await readPanel($)), today: await readToday($), projects: await readProjects($), favorites: await readFavorites($), stationTab: await readStationTab($), todos: await readTodos($), work: await readWork($), streak: await readStreak($), timeline: timeline.entries, timelineCount: timeline.count, frame }
 
     return e.surface === 'terminal' ? termPanelView(ui as Elements['terminal'], view, makeActions($)) : panelView(ui as Elements['desktop'], view, makeActions($))
   })

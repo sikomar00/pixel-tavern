@@ -13,7 +13,8 @@ import { music } from './music'
 import { projectRows } from './projects'
 import { quick } from './quick'
 import { MODES } from './scenes'
-import { stillSvg } from './still'
+import { BRIGHTNESS_LABEL, MOTION_LABEL, flashSvg, shadeSvg } from './effects'
+import { motionSvg } from './still'
 import { SPACE, chipOf } from './theme'
 import { timelineRows } from './timelinerows'
 import type { Ui as CommonUi } from './theme'
@@ -31,6 +32,7 @@ export type PanelData = BannerData & {
   stationTab: string
   todos: Todo[]
   timeline: TimelineEntry[]
+  streak: { count: number; best: number }
   timelineCount: number
   chatFiles: string[]
   isFilesOpen: boolean
@@ -89,7 +91,8 @@ export const settings = (ui: CommonUi, d: PanelData, act: Actions, hasMotion = t
       </Box>,
       <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={SPACE.control}>
         <Button key="fold:art" plain label={isFolded(d, 'art') ? '그림 ▸' : '그림 ▾'} onPress={() => act.toggleSection('art')} />
-        {hasMotion ? [<Button key="still" plain label={d.isStill ? '움직임 끔' : '움직임 켬'} onPress={() => act.toggleStill()} />] : []}
+        <Button key="brightness" plain label={BRIGHTNESS_LABEL[d.brightness]} onPress={() => act.cycleBrightness()} />
+        {hasMotion ? [<Button key="motion" plain label={MOTION_LABEL[d.motion]} onPress={() => act.cycleMotion()} />] : []}
         {mark(ui, d, act, 'scene')}
       </Box>,
       ...cardOf(ui, d, 'scene'),
@@ -198,6 +201,13 @@ export const status = (ui: CommonUi, d: PanelData, act: Actions) => {
             ...gitRows(ui, d, act),
           ]),
           inset(ui, [
+            ...(d.streak.best > 0
+              ? [
+                  <Text color={d.scene.muted} size="footnote">
+                    {`연속 ${d.streak.count}일 · 최고 ${d.streak.best}일`}
+                  </Text>,
+                ]
+              : []),
             <Text color={d.scene.muted} size="caption">
               오늘 누적
             </Text>,
@@ -271,7 +281,7 @@ export const panelView = (ui: Ui, d: PanelData, act: Actions) => {
           : [
               <Box backgroundColor={d.scene.base} justifyContent="center">
                 <Svg
-                  source={stillSvg(composeScene(ART[d.scene.id], percent), d.isStill)}
+                  source={motionSvg(composeScene(ART[d.scene.id], percent, shadeSvg(d.brightness, 85, 74) + flashSvg(d.reaction, d.motion, 85, 74)), d.motion)}
                   alt={`${d.scene.title}: ${d.scene.motto}`}
                   width={SCENE_WIDTH}
                   height={SCENE_HEIGHT}

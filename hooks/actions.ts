@@ -1,6 +1,6 @@
 import type { EngineInterface, Timer } from 'claude-code'
 
-import type { Mood, QuickKey, RadioState, SceneId } from '../types'
+import type { Brightness, Mood, Motion, QuickKey, RadioState, SceneId } from '../types'
 import { startRadio, stopRadio } from './radio'
 import { MODES, SCENES } from './scenes'
 import { chooseStation, readStation, showStationTab, toggleFavorite } from './stations'
@@ -13,9 +13,10 @@ import {
   readGitInfo,
   readMood,
   readOpenHelp,
+  cycleBrightness,
+  cycleMotion,
   toggleDiag,
   togglePicker,
-  toggleStill,
   refreshGit,
   readRadio,
   writeArmed,
@@ -73,7 +74,8 @@ export type Actions = {
   toggleFavorite: (id: string) => Promise<void>
   toggleHelp: (id: string) => Promise<void>
   toggleDiag: () => Promise<boolean>
-  toggleStill: () => Promise<boolean>
+  cycleMotion: () => Promise<Motion>
+  cycleBrightness: () => Promise<Brightness>
   toggleSection: (id: string) => Promise<void>
   toggleFiles: () => Promise<void>
   togglePicker: () => Promise<void>
@@ -179,7 +181,8 @@ export function makeActions($: EngineInterface): Actions {
     // "?"를 누르면 그 설명이 패널 안에서 펼쳐지고, 다시 누르면 접힌다(하나만 열린다).
     toggleHelp: async id => writeOpenHelp($, (await readOpenHelp($)) === id ? '' : id),
     toggleDiag: () => toggleDiag($),
-    toggleStill: () => toggleStill($),
+    cycleMotion: () => cycleMotion($),
+    cycleBrightness: () => cycleBrightness($),
     toggleSection: async id => {
       const ids = await readCollapsed($)
 

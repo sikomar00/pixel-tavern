@@ -46,6 +46,18 @@ export type TimelineEntry = { at: number; kind: TimelineKind; files?: number }
 /** 한 채팅의 오늘 기록. date가 오늘과 다르면 지난 기록이다. */
 export type TimelineDay = { date: string; entries: TimelineEntry[] }
 
+/** 그림의 효과 강도: 보통(모두 움직임) · 약하게(등불 깜박임만, 큰 움직임은 멈춤) · 끔(모두 멈춤, 반응의 반짝임도 없음). */
+export type Motion = 'full' | 'low' | 'off'
+
+/** 그림의 밝기. */
+export type Brightness = 'dim' | 'normal' | 'bright'
+
+/** 작업 끝·테스트 결과 반응(배너 문구가 4초 바뀌고, 효과가 켜져 있으면 그림이 3초 밝아졌다 돌아온다). 빈 글자는 반응 없음. */
+export type Reaction = '' | 'done' | 'stopped' | 'failed' | 'testPass' | 'testFail'
+
+/** 연속 기록: 마지막으로 일한 날(날짜 키), 연속 일수, 최고 일수. 날짜와 숫자뿐이다. */
+export type Streak = { last: string; count: number; best: number }
+
 export type Limit = { kind: string; percentUsed: number; resetsAt?: string }
 
 export type Usage = {
@@ -76,7 +88,10 @@ declare module 'claude-code' {
     'pixel-tavern': {
       mood: Shaped<Mood>
       isHidden: boolean
-      isStill: boolean
+      motion: Motion
+      brightness: Brightness
+      reaction: Reaction
+      streak: Streak
       slot: string
       own: Shaped<Today>
       others: Shaped<Today>

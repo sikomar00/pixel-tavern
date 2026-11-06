@@ -1,5 +1,7 @@
+import type { Brightness } from '../types'
 import { gaugeLevel } from './art'
 import type { SceneCells } from './art/cells'
+import { shadeColor } from './effects'
 
 // 터미널의 색 블록 그림(Raster)을 만드는 순수 함수들. 데이터(`art/cells/<장면>.ts`)는 tools/gen_art.py가 만든 칸 그림이고,
 // 칸 하나는 팔레트 번호 한 글자다. 글자 칸 하나에 위아래 두 칸을 담는다(▀: 글자색 = 위 칸, 배경색 = 아래 칸).
@@ -135,9 +137,11 @@ export const halfBlocks = (grid: Pixels, fill: number): Picture => {
 /** 쓸 수 있는 글자 칸 수에 맞는 줄임 배율: 85칸이 들어가면 1, 43칸이 들어가면 2, 아니면 4. */
 export const shrinkFor = (available: number): number => (available >= SCENE_COLUMNS ? 1 : available >= Math.ceil(SCENE_COLUMNS / 2) ? 2 : 4)
 
-/** 패널 장면 그림. `available`은 패널 본문의 글자 칸 수, `fill`은 장면 바탕색. */
-export const scenePicture = (cells: SceneCells, percent: number | null, available: number, fill: number): Picture =>
-  halfBlocks(shrink(sceneGrid(cells, percent), shrinkFor(available), fill), fill)
+const shaded = (grid: Pixels, brightness: Brightness): Pixels => (brightness === 'normal' ? grid : grid.map(row => row.map(color => shadeColor(color, brightness))))
+
+/** 패널 장면 그림. `available`은 패널 본문의 글자 칸 수, `fill`은 장면 바탕색, `brightness`는 그림 밝기. */
+export const scenePicture = (cells: SceneCells, percent: number | null, available: number, fill: number, brightness: Brightness = 'normal'): Picture =>
+  halfBlocks(shaded(shrink(sceneGrid(cells, percent), shrinkFor(available), fill), brightness), shadeColor(fill, brightness))
 
 /** 배너 왼쪽 엠블럼(12x5 글자 칸). */
-export const emblemPicture = (cells: SceneCells, fill: number): Picture => halfBlocks(emblemGrid(cells), fill)
+export const emblemPicture = (cells: SceneCells, fill: number, brightness: Brightness = 'normal'): Picture => halfBlocks(shaded(emblemGrid(cells), brightness), shadeColor(fill, brightness))
