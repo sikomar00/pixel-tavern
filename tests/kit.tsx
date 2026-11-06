@@ -156,6 +156,10 @@ export const world = (
     return { isFilled: true }
   })
   on('session.surfaces', () => ({ value: surfaces }))
+  // 모델 요청의 맨 아래: 요청을 보냈다고 치고 빈 답을 돌려준다(위의 훅이 모델·effort를 읽는 것만 시험한다).
+  on('turn.step', async function* (_, e) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null }
+  })
   on('ui.open', (_, e) => {
     opened?.push(e) // 패널을 열 때 보낸 요청(opened를 주면 쌓는다)
 

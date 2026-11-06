@@ -20,6 +20,7 @@ test('[레이아웃] 배너 게이지: 100%여도 기능 이름이 그대로 보
       usage: { limits: [{ kind: 'five_hour', percentUsed }] } as never,
       git: null,
       model: null,
+      effort: null,
       project: 'p',
       now: NOON,
       radio: 'off',
@@ -45,7 +46,7 @@ test('[레이아웃] 프로젝트 이름이 길면 배너는 칸 안에서 자�
   const long = 'a-very-long-project-name-that-keeps-going-2026-11-04-980f42'
   const korean = '아주아주아주긴프로젝트이름이계속됩니다'
   const svg = (project: string) =>
-    bannerSvg({ scene: SCENES.attic, usage: null, git: null, model: null, project, now: NOON, radio: 'off', isMusicAvailable: true, isStill: false })
+    bannerSvg({ scene: SCENES.attic, usage: null, git: null, model: null, effort: null, project, now: NOON, radio: 'off', isMusicAvailable: true, isStill: false })
 
   for (const name of [long, korean]) {
     expect(svg(name)).not.toContain(`>${name}<`)

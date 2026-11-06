@@ -113,6 +113,26 @@ test('[터미널] 패널: 데스크톱과 같은 여섯 구역 차례, 폭에 �
   await pane.unmount()
 })
 
+test('[터미널] 카드 안 묶음 사이에 가는 줄이 있고(음악 2·빠른 실행 1·할 일 1·사용량 1·작업 현황 2·파일 1), 접으면 그 줄도 사라지며, 데스크톱에는 없다', async ($, on) => {
+  const clock = world(on, { surfaces: ['terminal'] })
+
+  await $.session.start(TERMINAL_START)
+  await clock.settle()
+  const pane = await $.ui.mount(terminalPane(100))
+  const lines = async (target: { findAll: (query: object) => Promise<{ text?: string }[]> }) => (await target.findAll({ type: 'Text' })).filter(node => String(node.text).startsWith('────')).length
+
+  expect(await lines(pane)).toBe(8)
+  await pane.press({ key: 'fold:usage' })
+  expect(await lines(pane)).toBe(7) // 접으면 머리글 하나라 줄이 없다
+  await pane.press({ key: 'fold:music' })
+  expect(await lines(pane)).toBe(5)
+  await pane.unmount()
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  expect(await lines(desktop)).toBe(0)
+  await desktop.unmount()
+})
+
 test('[터미널] 패널 버튼: 음악·할 일·방송 바꾸기가 데스크톱과 똑같이 동작한다', async ($, on) => {
   const clock = world(on, { surfaces: ['terminal'] })
 
