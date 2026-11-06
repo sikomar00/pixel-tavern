@@ -150,6 +150,7 @@ def main() -> None:
     settings = load_settings()
     output = run_scenarios()
     rows = [json.loads(line.split("@@TREE@@", 1)[1]) for line in output.splitlines() if "@@TREE@@" in line]
+    rows = [row for row in rows if row.get("surface", "desktop") == "desktop"]  # 터미널 화면은 tools/render_term.py가 그린다
     renderer = Renderer(settings)
     width = settings["width"]
     parts = [

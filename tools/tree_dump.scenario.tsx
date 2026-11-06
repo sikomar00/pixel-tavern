@@ -3,6 +3,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 const NOON = Date.parse('2026-11-04T12:00:00')
+const BAND = { plugin: 'pixel-tavern', component: 'AbovePrompt', requestId: 'band', props: { hasSurvey: false, isWorking: false, maxRows: 8, bodyColumns: 100, scroll: { offset: 0, bodyRows: 7 }, view: {} } } as const
 const PANE = { plugin: 'pixel-tavern', component: 'Pane', requestId: 'tavern', props: { title: '여관', isFocused: false, bodyColumns: 51, placement: 'dock', scroll: { offset: 0, bodyRows: 63 }, view: {} } } as const
 
 const usage = (context: number | null, five: number | null) => ({
@@ -25,6 +26,10 @@ type Opts = {
   help?: string // 펼쳐 둘 도움말
   fold?: string[] // 접기/펴기를 누를 구역(art, usage, status, files, music, commits)
   picker?: boolean // 음악의 "방송 바꾸기"를 펼친다
+  surface?: 'desktop' | 'terminal' // 어느 화면으로 그릴지(기본 데스크톱)
+  columns?: number // 패널 본문의 글자 칸 수(기본 51)
+  band?: boolean // 패널 대신 프롬프트 위 배너를 그린다
+  hide?: boolean // 배너의 ✕를 눌러 숨긴 상태
 }
 
 const strip = (node: any): any => ({
@@ -86,14 +91,17 @@ const scenario = (opts: Opts) =>
         }
       })
     }
-    await $.session.start({ cwd: opts.cwd, surface: 'desktop', isInteractive: true })
+    const surface = opts.surface ?? 'desktop'
+
+    await $.session.start({ cwd: opts.cwd, surface, isInteractive: true })
     await clock.settle()
     for (let i = 1; i <= (opts.edits ?? 0); i++) await $.tool.call({ tool: 'Edit', file_path: `C:/work/p/src/components/file-number-${i}.tsx`, old_string: 'a', new_string: 'b' })
-    const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    const pane = await $.ui.mount(opts.band === true ? { ...BAND, props: { ...BAND.props, bodyColumns: opts.columns ?? 100 }, surface } : { ...PANE, props: { ...PANE.props, bodyColumns: opts.columns ?? 51 }, surface })
 
+    if (opts.hide) await pane.press({ key: 'hide' })
     if (opts.open) await pane.press({ key: 'files-toggle' })
     if (opts.arm) await pane.press({ key: 'commit' })
-    if (opts.radio === 'failed' || opts.radio === 'playing') await pane.press({ key: 'radio' })
+    if (opts.radio === 'failed' || opts.radio === 'playing') await pane.press({ key: opts.band === true ? 'music' : 'radio' })
     if (opts.picker) await pane.press({ key: 'picker' })
     if (opts.help !== undefined) await pane.press({ key: `help:${opts.help}` })
     for (const id of opts.fold ?? []) await pane.press({ key: `fold:${id}` })
@@ -101,7 +109,7 @@ const scenario = (opts: Opts) =>
     await clock.settle()
     const root = (await pane.findAll({ type: 'Box' }))[0]
 
-    console.log('@@TREE@@' + JSON.stringify({ id: opts.id, tree: strip(root) }))
+    console.log('@@TREE@@' + JSON.stringify({ id: opts.id, surface, columns: opts.columns ?? (opts.band === true ? 100 : 51), tree: strip(root) }))
     expect(true).toBe(true)
     await pane.unmount()
   })
@@ -116,3 +124,10 @@ scenario({ id: 'commits-open', cwd: 'C:/work/demo', usage: usage(42, 23), edits:
 scenario({ id: 'art-off', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['art'] }) // 그림을 접은 "집중" 상태
 scenario({ id: 'picker-open', cwd: 'C:/work/demo', scene: 'jazz', usage: usage(42, 23), edits: 2, radio: 'playing', picker: true }) // 방송 바꾸기를 펼친 상태
 scenario({ id: 'folded', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, fold: ['art', 'usage', 'status', 'files', 'music'] }) // 모두 접은 상태
+
+// 터미널 화면(tools/render_term.py가 그린다)
+scenario({ id: 'term-banner', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, surface: 'terminal', band: true, columns: 100 })
+scenario({ id: 'term-banner-hidden', cwd: 'C:/work/demo', usage: usage(42, 23), surface: 'terminal', band: true, hide: true })
+scenario({ id: 'term-banner-neon', cwd: 'C:/work/a-very-long-project-name-that-keeps-going', scene: 'neon', usage: usage(97, 120), edits: 3, surface: 'terminal', band: true, columns: 80, radio: 'playing' })
+scenario({ id: 'term-panel-56', cwd: 'C:/work/demo', usage: usage(42, 23), edits: 2, surface: 'terminal', columns: 56 })
+scenario({ id: 'term-panel-100', cwd: 'C:/work/demo', scene: 'jazz', usage: usage(70, 23), edits: 2, surface: 'terminal', columns: 100, radio: 'playing', picker: true })
