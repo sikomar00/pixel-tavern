@@ -1,7 +1,11 @@
-// [움직임 끄기] 시험(R-07). 공용 도우미는 ./kit.tsx 에 있다.
+// [움직임 끄기·효과 강도·밝기] 시험(R-07, F-25). 공용 도우미는 ./kit.tsx 에 있다.
 import { expect, test } from 'claude-code/testing'
 import { ART, composeScene } from '../hooks/art'
-import { stillSvg } from '../hooks/still'
+import { CELLS } from '../hooks/art/cells'
+import { scenePicture } from '../hooks/cells'
+import { shadeColor } from '../hooks/effects'
+import { SCENES } from '../hooks/scenes'
+import { motionSvg, stillSvg } from '../hooks/still'
 import { BAND, PANE, START, world } from './kit'
 
 const SAMPLE =
@@ -78,12 +82,41 @@ test('[움직임 끄기] 진짜 그림 전부(모든 장면의 배너 띠·패�
   }
 })
 
+const LOW =
+  '<svg><rect x="1" fill="#fff"><animate attributeName="opacity" values="1;0.15;1" dur="3s" begin="-1s" calcMode="discrete" repeatCount="indefinite"/></rect>' +
+  '<g opacity="1"><path d="M0 0h1v1z"/></g><g opacity="0"><path d="M1 1h1v1z"/></g><g transform="translate(3 4)"><rect/></g>' +
+  '<ellipse fill-opacity=".1"><animate attributeName="fill-opacity" values=".2;.1" dur="2s"/></ellipse></svg>'
+
+test('[효과 강도] 약하게는 프레임 묶음·이동만 멈추고 깜박임·불빛은 남기며, 보통은 그대로, 끔은 모두 멈춘다', async () => {
+  expect(motionSvg(SAMPLE, 'full')).toBe(SAMPLE)
+  expect(motionSvg(SAMPLE, 'off')).toBe(STILL)
+  expect(motionSvg(SAMPLE, 'low')).toBe(LOW)
+  expect(motionSvg(LOW, 'low')).toBe(LOW) // 한 번 더 해도 같다
+  expect(problemsOf(LOW)).toEqual([])
+})
+
+test('[효과 강도] 진짜 그림 전부에서 약하게는 프레임 묶음·이동 움직임이 없고 모양이 멀쩡하며, 배너 띠의 불빛 깜박임은 남는다', async () => {
+  for (const [id, art] of Object.entries(ART)) {
+    for (const moving of [art.strip, ...[null, 0, 42, 100].map(percent => composeScene(art, percent))]) {
+      const low = motionSvg(moving, 'low')
+
+      expect(count(low, /<animateTransform/g), `${id}: 이동`).toBe(0)
+      expect(count(low, /<g(?: opacity="[01]")?><animate/g), `${id}: 프레임 묶음`).toBe(0)
+      expect(problemsOf(low), `${id}: 모양`).toEqual([])
+    }
+    expect(count(motionSvg(art.strip, 'low'), /<animate/g), `${id}: 띠의 불빛`).toBeGreaterThan(0)
+  }
+})
+
 const sourcesOf = async (banner: { find: (q: object) => Promise<{ props: Record<string, unknown> } | undefined> }, pane: { findAll: (q: object) => Promise<{ props: Record<string, unknown> }[]> }) => [
   String((await banner.find({ type: 'Svg' }))?.props.source), // 배너 띠
   String((await pane.findAll({ type: 'Svg' }))[0]?.props.source), // 패널의 장면 그림
 ]
 
-test('[움직임 끄기] 패널의 "움직임" 버튼 하나로 배너와 패널 그림이 함께 멈추고, 다시 누르면 움직이며, 저장소에 남는다', async ($, on) => {
+const BRIGHT_SHADE = 'fill="#ffffff" fill-opacity="0.14"'
+const DIM_SHADE = 'fill="#000000" fill-opacity="0.38"'
+
+test('[효과 강도·밝기] 패널의 두 버튼이 단계를 돌리고(효과: 보통 → 약하게 → 끔, 밝기: 보통 → 밝게 → 어둡게) 배너와 패널 그림에 함께 적용되며 저장소에 남는다', async ($, on) => {
   const store: Record<string, unknown> = {}
   const clock = world(on, { liveStore: store })
 
@@ -91,23 +124,45 @@ test('[움직임 끄기] 패널의 "움직임" 버튼 하나로 배너와 패널
   await clock.settle()
   const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  const label = async () => (await pane.find({ key: 'still' }))?.props.label
+  const label = async (key: string) => (await pane.find({ key }))?.props.label
+  const every = async (check: (source: string) => boolean) => (await sourcesOf(banner, pane)).every(check)
 
-  expect(await label()).toBe('움직임 켬')
-  expect((await sourcesOf(banner, pane)).every(source => source.includes('<animate'))).toBe(true)
-  await pane.press({ key: 'still' })
-  expect(await label()).toBe('움직임 끔')
-  expect((await sourcesOf(banner, pane)).some(source => source.includes('<animate'))).toBe(false)
-  expect(store.isStill).toBe(true)
-  await pane.press({ key: 'still' })
-  expect(await label()).toBe('움직임 켬')
-  expect((await sourcesOf(banner, pane)).every(source => source.includes('<animate'))).toBe(true)
-  expect(store.isStill).toBe(false)
+  expect([await label('motion'), await label('brightness')]).toEqual(['효과 보통', '밝기 보통'])
+  expect(await every(source => source.includes('<animate') && !source.includes(BRIGHT_SHADE) && !source.includes(DIM_SHADE))).toBe(true)
+  await pane.press({ key: 'motion' })
+  expect(await label('motion')).toBe('효과 약하게')
+  expect(await every(source => !source.includes('<animateTransform'))).toBe(true)
+  expect((await sourcesOf(banner, pane))[0]).toContain('<animate') // 배너 띠의 불빛은 계속 깜박인다
+  expect(store.motion).toBe('low')
+  await pane.press({ key: 'motion' })
+  expect(await label('motion')).toBe('효과 끔')
+  expect(await every(source => !source.includes('<animate'))).toBe(true)
+  expect(store.motion).toBe('off')
+  await pane.press({ key: 'motion' })
+  expect(await label('motion')).toBe('효과 보통')
+  expect(await every(source => source.includes('<animate'))).toBe(true)
+  expect(store.motion).toBe('full')
+
+  await pane.press({ key: 'brightness' })
+  expect(await label('brightness')).toBe('밝기 밝게')
+  expect(await every(source => source.includes(BRIGHT_SHADE))).toBe(true)
+  expect(store.brightness).toBe('bright')
+  await pane.press({ key: 'brightness' })
+  expect(await label('brightness')).toBe('밝기 어둡게')
+  expect(await every(source => source.includes(DIM_SHADE))).toBe(true)
+  const scene = String((await pane.findAll({ type: 'Svg' }))[0]?.props.source)
+
+  expect(scene.indexOf(DIM_SHADE)).toBeLessThan(scene.indexOf('컨텍스트')) // 덮개는 게이지 글자 아래: 글자는 어두워지지 않는다
+  expect(store.brightness).toBe('dim')
+  await pane.press({ key: 'brightness' })
+  expect(await label('brightness')).toBe('밝기 보통')
+  expect(await every(source => !source.includes(BRIGHT_SHADE) && !source.includes(DIM_SHADE))).toBe(true)
+  expect(store.brightness).toBe('normal')
   await banner.unmount()
   await pane.unmount()
 })
 
-test('[움직임 끄기] 거의 동시에 두 번 눌러도 두 번 다 바뀐다(한 번이 사라지지 않는다)', async ($, on) => {
+test('[효과 강도] 거의 동시에 두 번 눌러도 두 번 다 바뀐다(한 번이 사라지지 않는다)', async ($, on) => {
   const store: Record<string, unknown> = {}
   const clock = world(on, { liveStore: store })
 
@@ -115,33 +170,77 @@ test('[움직임 끄기] 거의 동시에 두 번 눌러도 두 번 다 바뀐�
   await clock.settle()
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  await Promise.all([pane.press({ key: 'still' }), pane.press({ key: 'still' })])
-  expect((await pane.find({ key: 'still' }))?.props.label).toBe('움직임 켬') // 켰다가 다시 켠 것이 아니라, 껐다가 켰다
-  expect(store.isStill).toBe(false)
+  await Promise.all([pane.press({ key: 'motion' }), pane.press({ key: 'motion' })])
+  expect((await pane.find({ key: 'motion' }))?.props.label).toBe('효과 끔') // 보통 → 약하게 → 끔
+  expect(store.motion).toBe('off')
   await pane.unmount()
 })
 
-test('[움직임 끄기] 저장된 설정은 다음 세션에도 이어진다', async ($, on) => {
-  const clock = world(on, { stored: { isStill: true } })
+test('[효과 강도·밝기] 저장된 설정은 다음 세션에도 이어지고, 옛 "움직임 끔"(불리언)은 효과 끔으로 읽으며, 이상한 값은 기본으로 읽는다', async ($, on) => {
+  const clock = world(on, { stored: { motion: 'off', brightness: 'dim' } })
 
   await $.session.start(START)
   await clock.settle()
   const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
-  expect((await pane.find({ key: 'still' }))?.props.label).toBe('움직임 끔')
+  expect([(await pane.find({ key: 'motion' }))?.props.label, (await pane.find({ key: 'brightness' }))?.props.label]).toEqual(['효과 끔', '밝기 어둡게'])
   expect((await sourcesOf(banner, pane)).some(source => source.includes('<animate'))).toBe(false)
+  expect((await sourcesOf(banner, pane)).every(source => source.includes(DIM_SHADE))).toBe(true)
   await banner.unmount()
   await pane.unmount()
 })
 
-test('[움직임 끄기] 저장값이 불리언이 아니면 기본(움직임)으로 읽는다', async ($, on) => {
-  const clock = world(on, { stored: { isStill: 'yes' } })
+test('[효과 강도·밝기] 예전 설정(isStill: true)은 효과 끔으로 이어지고, 이상한 저장값은 보통·보통으로 읽는다', async ($, on) => {
+  const legacy = world(on, { stored: { isStill: true } })
+
+  await $.session.start(START)
+  await legacy.settle()
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  expect((await pane.find({ key: 'motion' }))?.props.label).toBe('효과 끔')
+  await pane.unmount()
+})
+
+test('[효과 강도·밝기] 모양이 틀린 저장값(motion 글자 아님·brightness 숫자·isStill 글자)은 기본으로 읽는다', async ($, on) => {
+  const clock = world(on, { stored: { motion: 'x', brightness: 7, isStill: 'yes' } })
 
   await $.session.start(START)
   await clock.settle()
   const banner = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
 
+  expect([(await pane.find({ key: 'motion' }))?.props.label, (await pane.find({ key: 'brightness' }))?.props.label]).toEqual(['효과 보통', '밝기 보통'])
   expect(String((await banner.find({ type: 'Svg' }))?.props.source)).toContain('<animate')
   await banner.unmount()
+  await pane.unmount()
+})
+
+test('[밝기] 터미널: 밝기 버튼만 있고(효과 버튼은 없다), 누르면 색 블록 그림의 색이 바뀌며, 칸 색은 어둡게 62%·밝게 흰색 쪽으로 16%다', async ($, on) => {
+  const clock = world(on, { surfaces: ['terminal'] })
+
+  await $.session.start({ ...START, surface: 'terminal' })
+  await clock.settle()
+  const pane = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 100 }, surface: 'terminal' })
+  const cells = async () => String((await pane.find({ type: 'Raster', key: 'scene' }))?.props.cells)
+  const normal = await cells()
+
+  expect(await pane.find({ key: 'motion' })).toBeUndefined()
+  await pane.press({ key: 'brightness' })
+  expect((await pane.find({ key: 'brightness' }))?.props.label).toBe('밝기 밝게')
+  const bright = await cells()
+
+  await pane.press({ key: 'brightness' })
+  const dim = await cells()
+
+  expect(new Set([normal, bright, dim]).size).toBe(3)
+  expect(shadeColor(0xffffff, 'dim')).toBe(0x9e9e9e)
+  expect(shadeColor(0x000000, 'bright')).toBe(0x292929)
+  expect(shadeColor(0x123456, 'normal')).toBe(0x123456)
+  const fill = 0x1b1b3a
+
+  expect(scenePicture(CELLS.attic, 42, 100, fill).cells).toBe(scenePicture(CELLS.attic, 42, 100, fill, 'normal').cells)
+  expect(scenePicture(CELLS.attic, 42, 100, fill, 'dim').cells).not.toBe(scenePicture(CELLS.attic, 42, 100, fill).cells)
+  expect(SCENES.attic.base).toBe('#1b1b3a') // 위의 fill이 장면 바탕색과 같다
+  await pane.unmount()
 })
