@@ -7,6 +7,7 @@ import { dungeon } from './dungeon'
 import { jazz } from './jazz'
 import { library } from './library'
 import { neon } from './neon'
+import { rooftop } from './rooftop'
 import { station } from './station'
 import { tearoom } from './tearoom'
 
@@ -19,7 +20,7 @@ export type SceneArt = {
   strip: string
 }
 
-export const ART: Record<SceneId, SceneArt> = { attic, tearoom, dungeon, neon, jazz, camp, library, arcade, drive, station }
+export const ART: Record<SceneId, SceneArt> = { attic, tearoom, dungeon, neon, jazz, camp, library, arcade, drive, station, rooftop }
 
 const LEVELS = 20 // 게이지 그림은 5% 단위
 

@@ -15,7 +15,7 @@ sys.path.insert(0, str(TOOLS))
 from artlib import MAX_SVG_BYTES, write_preview, write_ts  # noqa: E402
 from cellart import encode, write_cells_ts  # noqa: E402
 
-SCENES = ["attic", "tearoom", "dungeon", "neon", "jazz", "camp", "library", "arcade", "drive", "station"]
+SCENES = ["attic", "tearoom", "dungeon", "neon", "jazz", "camp", "library", "arcade", "drive", "station", "rooftop"]
 
 
 def check_size(name: str, art: dict) -> int:

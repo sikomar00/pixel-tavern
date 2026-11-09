@@ -15,7 +15,7 @@ const usage = (context: number | null, five: number | null) => ({
 type Opts = {
   id: string
   cwd: string
-  scene?: 'attic' | 'tearoom' | 'jazz' | 'camp' | 'library' | 'dungeon' | 'neon' | 'arcade' | 'drive' | 'station'
+  scene?: 'attic' | 'tearoom' | 'jazz' | 'camp' | 'library' | 'dungeon' | 'neon' | 'arcade' | 'drive' | 'station' | 'rooftop'
   usage: ReturnType<typeof usage>
   isRepo?: boolean
   edits?: number

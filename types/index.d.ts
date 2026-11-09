@@ -1,5 +1,5 @@
 export type ModeId = 'cozy' | 'adventure'
-export type SceneId = 'attic' | 'tearoom' | 'dungeon' | 'neon' | 'jazz' | 'camp' | 'library' | 'arcade' | 'drive' | 'station'
+export type SceneId = 'attic' | 'tearoom' | 'dungeon' | 'neon' | 'jazz' | 'camp' | 'library' | 'arcade' | 'drive' | 'station' | 'rooftop'
 
 /** 고른 모드와, 모드마다 마지막으로 고른 장면 */
 export type Mood = { mode: ModeId; sceneByMode: Record<ModeId, SceneId> }

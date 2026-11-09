@@ -7,6 +7,7 @@ import { dungeon } from './dungeon'
 import { jazz } from './jazz'
 import { library } from './library'
 import { neon } from './neon'
+import { rooftop } from './rooftop'
 import { station } from './station'
 import { tearoom } from './tearoom'
 
@@ -22,4 +23,4 @@ export type SceneCells = {
   emblem: readonly string[]
 }
 
-export const CELLS: Record<SceneId, SceneCells> = { attic, tearoom, dungeon, neon, jazz, camp, library, arcade, drive, station }
+export const CELLS: Record<SceneId, SceneCells> = { attic, tearoom, dungeon, neon, jazz, camp, library, arcade, drive, station, rooftop }

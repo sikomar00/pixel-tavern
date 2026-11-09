@@ -2,7 +2,7 @@ import type { ModeId, SceneId } from '../types'
 
 /**
  * 고를 수 있는 라디오 방송(24시간 인터넷 라디오). 장면마다 기본 방송이 있고, 패널에서 다른 방송을 고를 수 있다.
- * 방송을 바꾸거나 더하려면 여기만 고친다. Windows 재생기는 https를 못 열어서 http 주소만 된다(시험이 확인한다).
+ * 방송을 바꾸거나 더하려면 여기만 고친다. 재생기(WinRT)는 https도 열지만 방송 주소는 아직 모두 http다. 시험이 http만 허용한다(https로 바꿀 때는 방송마다 `tools/station_check.py`로 확인하고 시험의 주소 검사도 고친다).
  */
 export type Station = {
   id: string
@@ -32,6 +32,7 @@ const KAAOS: Station = { id: 'kaaos', label: 'Kaaos 칩튠 라디오', short: 'K
 const NIGHTRIDE: Station = { id: 'nightride', label: 'Nightride FM 신스웨이브', short: 'Nightride', group: 'synth', stream: 'http://stream.nightride.fm/nightride.mp3' }
 
 const GROOVESALAD: Station = { id: 'groovesalad', label: 'Groove Salad (SomaFM)', short: 'Groove Salad', group: 'calm', stream: 'http://ice1.somafm.com/groovesalad-128-mp3' }
+const FLUID: Station = { id: 'fluid', label: 'Fluid (SomaFM)', short: 'Fluid', group: 'calm', stream: 'http://ice1.somafm.com/fluid-128-mp3' }
 const SWISSJAZZ: Station = { id: 'swissjazz', label: 'Radio Swiss Jazz', short: 'Swiss Jazz', group: 'calm', stream: 'http://stream.srg-ssr.ch/m/rsj/mp3_128' }
 const ILLSTREET: Station = { id: 'illstreet', label: 'Illinois Street Lounge (SomaFM)', short: 'Ill. Street', group: 'calm', stream: 'http://ice1.somafm.com/illstreet-128-mp3' }
 const VGMRADIO: Station = { id: 'vgmradio', label: 'VGM Radio', short: 'VGM Radio', group: 'game', stream: 'http://radio.vgmradio.com:8040/stream' }
@@ -42,7 +43,7 @@ const DATAWAVE: Station = { id: 'datawave', label: 'Nightride Datawave', short: 
 export const STATIONS: Station[] = [
   REYFM,
   GROOVESALAD,
-  { id: 'fluid', label: 'Fluid (SomaFM)', short: 'Fluid', group: 'calm', stream: 'http://ice1.somafm.com/fluid-128-mp3' },
+  FLUID,
   SWISSJAZZ,
   ILLSTREET,
   OLDPOP,
@@ -75,7 +76,7 @@ export type Scene = {
 
 // 화면에는 보이지 않는다. 저장된 값의 모양(모드별 마지막 장면)과 장면 순서를 위해 남겨 둔다.
 export const MODES: { id: ModeId; scenes: SceneId[] }[] = [
-  { id: 'cozy', scenes: ['attic', 'tearoom', 'jazz', 'camp', 'library'] },
+  { id: 'cozy', scenes: ['attic', 'tearoom', 'jazz', 'camp', 'library', 'rooftop'] },
   { id: 'adventure', scenes: ['dungeon', 'neon', 'arcade', 'drive', 'station'] },
 ]
 
@@ -148,6 +149,17 @@ export const SCENES: Record<SceneId, Scene> = {
     accent2: '#ffd36e',
     muted: '#a9cfc0',
     music: GROOVESALAD,
+  },
+  rooftop: {
+    id: 'rooftop',
+    mode: 'cozy',
+    title: '옥상 정원의 새벽',
+    motto: '물 한 모금, 코드 한 줄',
+    base: '#1c1830',
+    accent: '#ff9ec2',
+    accent2: '#ffd9a0',
+    muted: '#c5b8dc',
+    music: FLUID,
   },
   library: {
     id: 'library',
