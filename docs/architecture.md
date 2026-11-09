@@ -10,7 +10,7 @@ Claude Code 데스크톱의 "모드"(hooks 모듈)로, 프롬프트 위의 픽�
 
 | 층 | 파일 | 줄 | 역할 |
 |---|---|---|---|
-| 데이터 | `scenes.ts` | 201 | 장면 10개(이름·팔레트·게이지 이름·기본 방송), 고를 수 있는 방송 목록 `STATIONS` 16곳(이름표·이름·버튼용 짧은 이름·분위기 묶음·주소) |
+| 데이터 | `scenes.ts` | 213 | 장면 11개(이름·팔레트·게이지 이름·기본 방송), 고를 수 있는 방송 목록 `STATIONS` 16곳(이름표·이름·버튼용 짧은 이름·분위기 묶음·주소) |
 | | `volume.ts`, `format.ts` | 10, 71 | 음량 5단계 표, 날짜·글자 서식, 제어 문자 제거 |
 | | `art/` | — | 생성된 SVG(코드가 아니라 데이터). `tools/gen_art.py`가 만듦 |
 | 상태 | `state.ts` | 365 | 상태 값(atom) 선언, 저장소 읽기·쓰기(장면·음량·접힘·효과·밝기 등), 이 채팅의 파일 기록 |
@@ -21,7 +21,7 @@ Claude Code 데스크톱의 "모드"(hooks 모듈)로, 프롬프트 위의 픽�
 | | `streak.ts` | 64 | 연속 기록: 저장소의 `streak`(마지막 일한 날·연속·최고, 숫자뿐)을 읽고 쓰며 프롬프트를 보낸 날을 센다. 어제는 달력으로 계산, 오늘 이미 셌으면 쓰지 않음 |
 | | `reaction.ts` | 41 | 작업 끝·테스트 결과 반응(4초): 턴 끝 이유 → 반응, 터미널 명령이 테스트인지 판정(명령 조각 맨 앞의 도구 이름), 타이머 하나로 다시 세기. 명령 글은 저장하지 않음 |
 | 바깥 세계 | `git.ts` | 90 | `git status -z/log` 읽기(안전 옵션 포함). status를 NUL로 나눠 이름을 따옴표·이스케이프 없이 있는 그대로 받아 바뀐 파일 목록(종류별)으로 해석 |
-| | `radio.ts` | 192 | PowerShell 재생기 스크립트, 재생 상태, 다른 채팅 감지, 연결 포기 |
+| | `radio.ts` | 198 | PowerShell 재생기 스크립트(WinRT `Windows.Media.Playback.MediaPlayer`, https도 열고 CPU·메모리가 적음), 재생 상태, 다른 채팅 감지, 연결 포기 |
 | | `title.ts` | 97 | 지금 곡의 제목 읽기: 방송에 짧게 따로 접속하는 PowerShell 스크립트(`TITLE_SCRIPT`)와 그 출력 해석(`parseTitle`). 제목은 저장하지 않는다 |
 | 동작 | `actions.ts` | 246 | 버튼이 하는 일(장면·음악·방송 고르기·즐겨찾기·커밋·정리 두 단계·접기·효과·밝기 돌리기·도움말) |
 | | `alerts.ts` | 43 | 사용량 90% 알림 규칙 |
@@ -99,6 +99,7 @@ register ─┬─ actions ── radio ── state ── git
 | `tools/measured.json` | 실제 앱에서 잰 값(패널 약 388px, 51열×63줄, 글자 칸 7.72px 등) |
 | `tools/title_check.py` | 방송 16곳에 곡 제목 조회 스크립트를 실제로 돌려 제목이 읽히는지 봄(소리 없음, 방송마다 한 번 짧게 접속) |
 | `tools/bench_render.cjs` | 그리기 함수(배너·패널 그림, 터미널 색 블록, 패널 화면 구성)와 모듈 불러오기의 시간·크기를 Node에서 잼(엔진이 그리는 시간은 못 잼). 결과는 `docs/review/performance.md` |
+| `tools/scenes/<id>.py` + `tools/gen_art.py` | 장면 그림 원본(파이썬 그리기)과 생성 도구. `python tools/gen_art.py`가 `hooks/art/<id>.ts`(SVG)와 `hooks/art/cells/<id>.ts`(터미널 칸 그림)를 만든다. 새 장면 추가 절차는 `docs/adding-a-scene.md` |
 | `package.json`, `package-lock.json`, `tsconfig.json` | 타입 검사용 TypeScript 5.9.3 고정(`npm run typecheck`), MCP 도구 타입을 뺀 검사 설정. 모드의 런타임과는 상관없다 |
 | `tools/player_check.py` | 실제 Windows 재생기 점검(`normal`·`dead`·`orphan`·`kill`, 묶음 `quick`·`all`). 항목마다 통과·실패를 판정하고 하나라도 실패하면 종료 코드 1 |
 | `tools/winrt_probe.ps1` | Windows에 들어 있는 WinRT 재생기(`Windows.Media.Playback.MediaPlayer`)가 주소 하나를 음량 0으로 재생하는지와 CPU·메모리를 잼(https 방송 조사용, 모드가 쓰는 재생기와는 별개) |

@@ -38,7 +38,7 @@
 
 **비밀 정보 [확인]** 코드·도구·시험에서 `token|secret|password|api key|Authorization|Bearer`를 검색했습니다. 걸린 것은 컨텍스트 "토큰 수"(`tokens`) 표시뿐이고 키·비밀번호는 없습니다. 환경변수는 `TAVERN_URL`, `TAVERN_VOLUME` 두 개뿐입니다. 로그(`$.ui.log`)에는 오류 글만 남깁니다.
 
-**외부 HTTP 스트림 [확인]** 방송 16곳이 모두 `http://`(암호화 없음)입니다. `https`는 이 재생 방식에서 연결에 실패했습니다(이전 실험). 위험: 같은 네트워크의 제3자가 소리를 바꿔치거나, 방송국이 접속 IP를 알 수 있습니다. 코드 실행 경로는 아닙니다(MediaPlayer가 오디오를 디코딩). 연결은 사용자가 ▶를 누를 때만 일어납니다. 오디오 디코더 자체의 취약점은 이 모드의 범위 밖입니다.
+**외부 HTTP 스트림 [확인]** 방송 16곳이 모두 `http://`(암호화 없음)입니다. `https`는 예전 재생기(WPF MediaPlayer)에서 연결에 실패했고, 지금 재생기(WinRT MediaPlayer)는 https를 열 수 있지만(조사: SomaFM 한 곳) 방송 주소는 아직 모두 http입니다. 위험: 같은 네트워크의 제3자가 소리를 바꿔치거나, 방송국이 접속 IP를 알 수 있습니다. 코드 실행 경로는 아닙니다(MediaPlayer가 오디오를 디코딩). 연결은 사용자가 ▶를 누를 때만 일어납니다. 오디오 디코더 자체의 취약점은 이 모드의 범위 밖입니다.
 
 **방송 서버 목록 [확인]** 접속하는 서버는 8곳(`listen.reyfm.de`, `cast.oldpopcafe.net`, `stream.kaaosradio.fi`, `stream.nightride.fm`, `ice1.somafm.com`, `stream.srg-ssr.ch`, `radio.vgmradio.com`, `radio-paralax.de`)이고, 사용자가 이름·서버·실제 재생 결과를 보고 승인한 곳만 목록에 둔다(`tests/function.test.tsx`가 목록의 서버 이름을 이 허용 목록과 대조해 몰래 늘지 않게 한다). 연결은 사용자가 ▶를 눌렀을 때 고른 방송 한 곳에만 한다. 저장하는 것은 방송 이름표(id)뿐이다. 개인·동호회 운영 방송 2곳(VGM Radio, Radio Paralax)은 사라지거나 주인이 바뀔 수 있다(R-28).
 
