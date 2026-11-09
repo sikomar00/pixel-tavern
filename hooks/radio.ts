@@ -21,7 +21,8 @@ export const MAX_TRIES = RETRY_WAIT_TICKS.length
 const CHAT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
 /**
- * Windows PowerShell의 MediaPlayer로 방송을 튼다(숨김 창, 주소는 환경변수로 받는다).
+ * Windows PowerShell에서 WinRT MediaPlayer(Windows.Media.Playback)로 방송을 튼다(숨김 창, 주소는 환경변수로 받는다). WPF MediaPlayer와 달리 https도 열고
+ * CPU·메모리가 적다(docs/review/performance.md). 새로 연결할 때마다 재생기를 새로 만든다(옛 것은 Dispose).
  * 반 초마다 "."을 써서 정지 신호를 빨리 알아채게 하고, 소리가 안 흐르면 점점 길게 기다리며 다시 연결한다(15초·30초·60초·2분·2분, 5번까지.
  * 다시 연결할 때마다 "connecting" 다음에 "retry:번호"를 알리고, 그래도 안 되면 "gaveup"을 알리고 끝낸다).
  * 부모(엔진) 프로세스가 사라지면 스스로 끝난다: 앱이 강제 종료돼도 소리만 나는 고아가 남지 않는다. 출력 파이프가 끊겨도 .NET은 쓰기 오류를 무시해서 파이프로는 알 수 없다(실험으로 확인).
@@ -29,15 +30,20 @@ const CHAT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2
  * 다른 채팅이 켜 둔 재생기(MARKER와 실행 인자 서명이 둘 다 명령줄에 있다)는 먼저 끈다: 소리는 한 곳에서만 난다.
  */
 export const PLAYER = `
-Add-Type -AssemblyName PresentationCore
+$null = [Windows.Media.Playback.MediaPlayer, Windows.Media.Playback, ContentType = WindowsRuntime]
+$null = [Windows.Media.Core.MediaSource, Windows.Media.Core, ContentType = WindowsRuntime]
 # ${MARKER}
 Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*${MARKER}*' -and $_.CommandLine -like '*${SIGNATURE}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-$p = New-Object System.Windows.Media.MediaPlayer
-$p.Volume = [double]$env:TAVERN_VOLUME
 function Say($s) { [Console]::Out.WriteLine($s) }
 $parent = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId
 $age = 0; $watch = $false
-function Open-Radio { $p.Open([uri]$env:TAVERN_URL); $p.Play(); Say 'connecting' }
+function Open-Radio {
+  if ($global:p) { $global:p.Dispose() }
+  $global:p = New-Object Windows.Media.Playback.MediaPlayer
+  $global:p.Volume = [double]$env:TAVERN_VOLUME
+  $global:p.Source = [Windows.Media.Core.MediaSource]::CreateFromUri([uri]$env:TAVERN_URL)
+  $global:p.Play(); Say 'connecting'
+}
 $waits = @(${RETRY_WAIT_TICKS.join(', ')})
 $tries = 0
 Open-Radio
@@ -47,13 +53,13 @@ while ($true) {
   $age++
   if ($age -eq 10) { $watch = ($parent -gt 0) -and [bool](Get-Process -Id $parent -ErrorAction SilentlyContinue) }
   if ($watch -and $age % 10 -eq 0 -and -not (Get-Process -Id $parent -ErrorAction SilentlyContinue)) { exit }
-  $pos = $p.Position.TotalSeconds
+  $pos = $p.PlaybackSession.Position.TotalSeconds
   if ($pos -gt $last + 0.1) { $still = 0; if (-not $isPlaying) { $isPlaying = $true; $tries = 0; Say 'playing' } } else { $still++ }
   $last = $pos
   if ($still -ge $waits[$tries]) {
     $tries++
     if ($tries -ge ${MAX_TRIES}) { Say 'gaveup'; exit }
-    $p.Close(); $isPlaying = $false; $still = 0; $last = 0.0
+    $isPlaying = $false; $still = 0; $last = 0.0
     Open-Radio
     Say "retry:$($tries + 1)"
   }
