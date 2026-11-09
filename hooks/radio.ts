@@ -95,7 +95,7 @@ async function warnIfStillConnecting($: EngineInterface, playback: Playback): Pr
 }
 
 const TITLE_FIRST_MS = 3_000 // 소리가 나오기 시작한 뒤 처음 제목을 읽기까지
-const TITLE_EVERY_MS = 30_000 // 그 뒤로 제목을 다시 읽는 간격(곡은 보통 몇 분이라 이 정도면 충분하고, 방송에 자주 접속하지 않는다)
+const TITLE_EVERY_MS = 60_000 // 그 뒤로 제목을 다시 읽는 간격(곡은 보통 몇 분이라 충분하다. 한 번 읽을 때 PowerShell이 CPU를 약 1.1초 쓰는 것을 재 보고 30초에서 늘렸다)
 
 /** 소리가 나오는 동안 곡 제목을 읽어 보인다. 제목을 못 읽어도(방송이 안 보내거나 접속 실패) 재생에는 영향이 없고, 못 읽은 차례는 건너뛴다. */
 async function followTitle($: EngineInterface, playback: Playback): Promise<void> {
