@@ -40,9 +40,11 @@
 | `python tools/player_check.py dead` | 약 6분 | 연결 시도 5번(약 1·17·48·109·233초), `retry:2~5` 신호, 약 356초에 `gaveup`, 종료 코드 0 |
 | `python tools/player_check.py orphan` | 약 40초 | 부모를 강제로 죽인 뒤 5~10초 안에 재생기 0개 |
 | `python tools/player_check.py kill` | 약 35초 | 두 번째 재생기가 켜지면 첫 재생기만 꺼지고, 표식 글자만 든(또는 실행 인자만 같은) 다른 powershell은 살아 있음 |
+| `python tools/player_check.py quick` | 약 2분 | `normal` + `orphan` + `kill`을 차례로: 9개 항목이 모두 통과(요약에 `[통과]`), 종료 코드 0. 하나라도 `[실패]`면 종료 코드 1 |
+| `python tools/player_check.py all` | 약 8분 | `quick` + `dead`(4개 항목): 13개 항목이 모두 통과 |
 
 **주의**: 재생기는 시작할 때 이미 켜져 있던 다른 재생기를 끕니다(설계: 소리는 한 곳에서만). 이 점검을 돌리면 지금 듣고 있는 음악도 꺼집니다. 인터넷 연결이 필요합니다(`normal`).
-**언제 돌리나**: `hooks/radio.ts`의 `PLAYER`를 고칠 때마다 세 가지를 모두.
+**언제 돌리나**: `hooks/radio.ts`의 `PLAYER`를 고칠 때마다 `quick`을, 재연결 간격(`RETRY_WAIT_TICKS`)을 고칠 때는 `dead`도.
 
 **방송 목록 점검**: `python tools/station_check.py`(전체, 방송마다 최대 약 30초) 또는 `python tools/station_check.py groovesalad`(하나). 목록의 모든 방송을 실제 재생기(음량 0)에 한 곳씩 물려 재생까지 걸린 시간과 8초 동안의 끊김을 본다. 새 방송을 더하기 전, 그리고 "방송이 안 나와요"가 의심될 때 돌린다(방송 주소는 바뀔 수 있다). 이 점검도 켜져 있던 재생기를 끈다.
 
@@ -53,7 +55,7 @@
 1. `claude plugin validate .` — 통과(README 설치 안내 경고는 무시 가능)
 2. `claude plugin test .` — 전부 통과, 개수가 줄지 않았는지 확인
 3. 타입 검사: `npm run typecheck`(처음 한 번 `npm install`로 고정된 TypeScript 5.9.3을 설치) — 오류 0개(약 10초). 시험·`validate`가 못 보는 타입 오류를 잡는다(F-15, F-22). 앱에 연결된 MCP 서버의 도구 타입은 빼고 돈다(`tsconfig.json`: 서버 구성에 따라 `$.tool.call`에서 TS2589가 나던 것을 막고 검사를 빠르게 한다)
-4. 재생기를 건드렸다면 `player_check.py` 네 가지(`normal`·`dead`·`orphan`·`kill`), 방송 목록을 건드렸다면 `station_check.py`
+4. 재생기를 건드렸다면 `python tools/player_check.py quick`(약 2분, 통과·실패를 스스로 판정)과 `dead`(약 6분), 방송 목록을 건드렸다면 `station_check.py`
 5. 화면을 건드렸다면 아래 4절의 해당 항목
 
 ## 4. 사람 확인 목록(실제 앱)

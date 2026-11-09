@@ -100,6 +100,7 @@ register ─┬─ actions ── radio ── state ── git
 | `tools/title_check.py` | 방송 16곳에 곡 제목 조회 스크립트를 실제로 돌려 제목이 읽히는지 봄(소리 없음, 방송마다 한 번 짧게 접속) |
 | `tools/bench_render.cjs` | 그리기 함수(배너·패널 그림, 터미널 색 블록, 패널 화면 구성)와 모듈 불러오기의 시간·크기를 Node에서 잼(엔진이 그리는 시간은 못 잼). 결과는 `docs/review/performance.md` |
 | `package.json`, `package-lock.json`, `tsconfig.json` | 타입 검사용 TypeScript 5.9.3 고정(`npm run typecheck`), MCP 도구 타입을 뺀 검사 설정. 모드의 런타임과는 상관없다 |
-| `tools/player_check.py` | 실제 Windows 재생기 점검 4종(`normal`·`dead`·`orphan`·`kill`) |
+| `tools/player_check.py` | 실제 Windows 재생기 점검(`normal`·`dead`·`orphan`·`kill`, 묶음 `quick`·`all`). 항목마다 통과·실패를 판정하고 하나라도 실패하면 종료 코드 1 |
+| `tools/winrt_probe.ps1` | Windows에 들어 있는 WinRT 재생기(`Windows.Media.Playback.MediaPlayer`)가 주소 하나를 음량 0으로 재생하는지와 CPU·메모리를 잼(https 방송 조사용, 모드가 쓰는 재생기와는 별개) |
 | `tools/station_check.py` | 방송 목록의 모든 방송을 실제 재생기(음량 0)에 한 곳씩 물려 재생 여부·끊김을 봄(새 방송을 더하기 전에 돌림) |
 | `tools/git_fixture.py` | 실제 git으로 어려운 파일 이름이 든 임시 저장소를 만들어 `status -z` 출력을 찍음(`tests/git.test.tsx`의 `REAL_Z`와 같아야 함) |
