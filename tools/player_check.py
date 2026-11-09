@@ -4,6 +4,10 @@
   python tools/player_check.py dead     죽은 주소: 점점 길게 기다리며 5번 다시 연결해 보고(15초·30초·60초·2분·2분) 'gaveup' 뒤 스스로 끝나는지 (약 6분)
   python tools/player_check.py orphan   부모(엔진 역할) 프로세스를 강제로 죽이면 재생기가 스스로 끝나는지 (약 40초)
   python tools/player_check.py kill     새 재생기가 켜질 때 옛 재생기만 끄고, 표식 글자만 든(또는 실행 인자만 같은) 다른 powershell은 건드리지 않는지 (약 35초)
+  python tools/player_check.py quick    normal + orphan + kill 을 차례로 (약 2분). 재생기 스크립트(PLAYER)를 고칠 때마다 돌린다
+  python tools/player_check.py all      quick + dead (약 8분)
+
+각 점검은 항목마다 통과·실패를 판정해서 요약을 내고, 하나라도 실패하면 종료 코드 1로 끝난다. 실제 방송에 접속하므로 네트워크가 막혀 있으면 normal·orphan·kill이 실패한다.
 
 주의: 재생기는 시작할 때 이미 켜져 있던 다른 재생기를 끈다(설계). 이 점검을 돌리면 지금 듣고 있는 음악도 꺼진다.
 """
@@ -30,15 +34,20 @@ def launch_args() -> list[str]:
     return re.findall(r"'([^']+)'", re.search(r'const LAUNCH = \[(.+?)\]', RADIO_TS).group(1))  # type: ignore[union-attr]
 
 
+def retry_ticks() -> list[str]:
+    """radio.ts 의 RETRY_WAIT_TICKS(재연결 기다림, 반 초 단위) 값 목록. 길이가 시도 횟수 한도다."""
+    ticks = re.search(r'export const RETRY_WAIT_TICKS = \[([^\]]+)\]', RADIO_TS).group(1)  # type: ignore[union-attr]
+
+    return [part.strip() for part in ticks.split(',') if part.strip()]
+
+
 def player_script() -> str:
     """radio.ts 에서 PLAYER 문자열을 꺼내 ${MARKER}, ${SIGNATURE}, ${RETRY_WAIT_TICKS...}, ${MAX_TRIES} 를 값으로 바꾼다."""
     body = RADIO_TS.split('export const PLAYER = `', 1)[1].split('\n`', 1)[0]
     marker = re.search(r"const MARKER = '([^']+)'", RADIO_TS).group(1)  # type: ignore[union-attr]
-    ticks = re.search(r'export const RETRY_WAIT_TICKS = \[([^\]]+)\]', RADIO_TS).group(1)  # type: ignore[union-attr]
-    tries = len([part for part in ticks.split(',') if part.strip()])
 
     return (body.replace('${MARKER}', marker).replace('${SIGNATURE}', ' '.join(launch_args()))
-            .replace("${RETRY_WAIT_TICKS.join(', ')}", ', '.join(part.strip() for part in ticks.split(','))).replace('${MAX_TRIES}', str(tries)))
+            .replace("${RETRY_WAIT_TICKS.join(', ')}", ', '.join(retry_ticks())).replace('${MAX_TRIES}', str(len(retry_ticks()))))
 
 
 def ps(command: str) -> str:
@@ -82,23 +91,29 @@ def collect(proc: subprocess.Popen) -> list[tuple[float, str]]:
     return lines
 
 
-def normal() -> None:
+Check = tuple[str, bool]  # (점검 이름, 통과 여부)
+
+
+def normal() -> list[Check]:
     proc = start(STREAM)
     lines = collect(proc)
 
     time.sleep(14)
-    first = next((t for t, text in lines if text == 'playing'), None)
     early = usage_of(proc.pid)
     time.sleep(10)
+    first = next((t for t, text in lines if text == 'playing'), None)
     print('정상 방송: playing 까지 ' + (f'{first:.1f}초' if first else '신호 없음'))
     print(f'자원(14초 / 24초 시점): {early} / {usage_of(proc.pid)}')
     proc.kill()
     proc.wait()
     time.sleep(1)
-    print(f'끈 뒤 남은 재생기: {count_players()}개')
+    left = count_players()
+    print(f'끈 뒤 남은 재생기: {left}개')
+
+    return [('playing 신호가 24초 안에 온다', first is not None), ('끈 뒤 남은 재생기가 0개다', left == 0)]
 
 
-def dead() -> None:
+def dead() -> list[Check]:
     proc = start(DEAD_URL)
     lines = collect(proc)
     t0 = time.time()
@@ -109,28 +124,44 @@ def dead() -> None:
     print('retry 신호(시각 초, 내용) ' + str([(round(t), text) for t, text in lines if text.startswith('retry:')]))
     print('gaveup 시각(초) ' + str([round(t) for t, text in lines if text == 'gaveup']))
     print('끝났나: ' + ('아직 살아 있음' if proc.poll() is None else f'예(종료 코드 {proc.poll()})'))
+    code = proc.poll()
     proc.kill()
+    retries = {text for _, text in lines if text.startswith('retry:')}
+
+    return [
+        ('연결을 정확히 5번 시도한다', len([1 for _, text in lines if text == 'connecting']) == len(retry_ticks())),
+        ('retry:2~5 신호가 모두 온다', retries >= {'retry:2', 'retry:3', 'retry:4', 'retry:5'}),
+        ('gaveup 신호가 한 번 온다', len([1 for _, text in lines if text == 'gaveup']) == 1),
+        ('gaveup 뒤 스스로 끝난다(종료 코드 0)', code == 0),
+    ]
 
 
 def alive(proc: subprocess.Popen) -> bool:
     return proc.poll() is None
 
 
-def kill() -> None:
+def kill() -> list[Check]:
     """새 재생기가 켜질 때 옛 재생기만 끄고, 표식 글자만 있거나 실행 인자만 같은 다른 프로세스는 건드리지 않는지 본다."""
     marker_only = subprocess.Popen(['powershell.exe', '-NoProfile', '-Command', 'Start-Sleep 120 # pixel-tavern-radio'], creationflags=NO_WINDOW)  # 표식만 있다
     signature_only = subprocess.Popen(['powershell.exe', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', 'Start-Sleep 120'], creationflags=NO_WINDOW)  # 서명만 있다
     first = start(STREAM)
 
     time.sleep(9)
-    print(f"두 번째 재생기를 켜기 전: 첫 재생기 {'살아 있음' if alive(first) else '꺼짐'}")
+    first_before = alive(first)
+    print(f"두 번째 재생기를 켜기 전: 첫 재생기 {'살아 있음' if first_before else '꺼짐'}")
     second = start(STREAM)
     time.sleep(12)  # 두 번째가 시작할 때 이전 재생기를 끈다
-    print(f"두 번째 재생기를 켠 뒤: 첫 재생기 {'살아 있음(문제)' if alive(first) else '꺼짐(정상)'}, 두 번째 {'살아 있음(정상)' if alive(second) else '꺼짐(문제)'}")
-    print(f"표식 글자만 든 다른 powershell: {'살아 있음(정상)' if alive(marker_only) else '꺼짐(문제: 잘못 껐다)'}")
-    print(f"실행 인자만 같은 다른 powershell: {'살아 있음(정상)' if alive(signature_only) else '꺼짐(문제: 잘못 껐다)'}")
+    checks = [
+        ('두 번째를 켜기 전에는 첫 재생기가 살아 있다', first_before),
+        ('두 번째를 켜면 첫 재생기만 꺼진다', not alive(first)),
+        ('두 번째 재생기는 살아 있다', alive(second)),
+        ('표식 글자만 든 다른 powershell은 건드리지 않는다', alive(marker_only)),
+        ('실행 인자만 같은 다른 powershell은 건드리지 않는다', alive(signature_only)),
+    ]
     for proc in (marker_only, signature_only, second, first):
         proc.kill()
+
+    return checks
 
 
 def parent() -> None:
@@ -139,7 +170,7 @@ def parent() -> None:
     time.sleep(120)
 
 
-def orphan() -> None:
+def orphan() -> list[Check]:
     helper = subprocess.Popen([sys.executable, __file__, '--parent'], creationflags=NO_WINDOW)
 
     time.sleep(9)  # 재생기가 시작 5초 뒤 부모 감시를 켤 시간
@@ -153,20 +184,37 @@ def orphan() -> None:
     print(f'부모를 죽이기 전 재생기: {before}개')
     print('부모를 죽인 뒤: ' + (f'{time.time() - t0:.1f}초 만에 모두 끝남' if left == 0 else f'30초가 지나도 {left}개가 남음(고아)'))
 
+    return [('부모를 죽이기 전에는 재생기가 1개 떠 있다', before == 1), ('부모를 죽이면 30초 안에 재생기가 모두 끝난다', left == 0)]
+
+
+MODES = {'normal': [normal], 'dead': [dead], 'orphan': [orphan], 'kill': [kill], 'quick': [normal, orphan, kill], 'all': [normal, orphan, kill, dead]}
+
 
 def main() -> None:
     if sys.argv[1:] == ['--parent']:
         return parent()
-    choice = {'normal': normal, 'dead': dead, 'orphan': orphan, 'kill': kill}.get(sys.argv[1] if len(sys.argv) > 1 else '')
+    steps = MODES.get(sys.argv[1] if len(sys.argv) > 1 else '')
 
-    if choice is None:
+    if steps is None:
         sys.exit(__doc__)
-    stop_players()
-    try:
-        choice()
-    finally:
+    results: list[Check] = []
+
+    for step in steps:
+        print(f'\n--- {step.__name__} ---')
         stop_players()
-        print(f'정리 후 남은 재생기: {count_players()}개')
+        try:
+            results += [(f'{step.__name__}: {name}', ok) for name, ok in step()]
+        finally:
+            stop_players()
+            print(f'정리 후 남은 재생기: {count_players()}개')
+    print('\n=== 요약 ===')
+    for name, ok in results:
+        print(f"[{'통과' if ok else '실패'}] {name}")
+    failed = [name for name, ok in results if not ok]
+
+    print(f'통과 {len(results) - len(failed)}개, 실패 {len(failed)}개')
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == '__main__':
