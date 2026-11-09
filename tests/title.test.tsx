@@ -41,7 +41,7 @@ const playing = async ($: Engine, on: Parameters<typeof mock.clock>[0], titles: 
   return { clock, banner, pane }
 }
 
-test('[곡 제목] 소리가 나오면 3초 뒤 처음 읽고 30초마다 다시 읽어 배너와 음악 카드에 보이고, 못 읽으면 앞 제목을 두며, 제목을 안 보내는 방송이면 지우고, 끄면 지운다', async ($, on) => {
+test('[곡 제목] 소리가 나오면 3초 뒤 처음 읽고 60초마다 다시 읽어 배너와 음악 카드에 보이고, 못 읽으면 앞 제목을 두며, 제목을 안 보내는 방송이면 지우고, 끄면 지운다', async ($, on) => {
   const titles: TitleFake = {
     urls: [],
     outputs: [{ stdout: titleLine('Artist - Song') }, { stdout: titleLine('한글 제목 · Café') }, { stdout: '', exitCode: 1 }, { stdout: '' }],
@@ -60,11 +60,14 @@ test('[곡 제목] 소리가 나오면 3초 뒤 처음 읽고 30초마다 다시
   expect(await svg()).toContain('♪ Artist - Song')
   expect(await line()).toBe('♪ Artist - Song')
   await clock.advance(30_000)
+  expect(titles.urls).toHaveLength(1) // 60초가 되기 전에는 다시 읽지 않는다
+  expect(await line()).toBe('♪ Artist - Song')
+  await clock.advance(30_000)
   expect(await line()).toBe('♪ 한글 제목 · Café')
-  await clock.advance(30_000) // 조회가 실패했다: 앞 제목을 그대로 둔다
+  await clock.advance(60_000) // 조회가 실패했다: 앞 제목을 그대로 둔다
   expect(titles.urls).toHaveLength(3)
   expect(await line()).toBe('♪ 한글 제목 · Café')
-  await clock.advance(30_000) // 제목을 보내지 않는 방송: 지운다
+  await clock.advance(60_000) // 제목을 보내지 않는 방송: 지운다
   expect(await line()).toBeUndefined()
   expect(await svg()).toContain('♪ REYFM 로파이')
   await banner.press({ key: 'music' }) // 끈다
