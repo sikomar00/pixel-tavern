@@ -92,15 +92,15 @@ test('[기능] 빠른 실행: 바뀐 파일이 없으면 커밋은 알려 주기
   await pane.unmount()
 })
 
-test('[기능] 장면 10개: 이름·모토·바탕색·그림이 겹치지 않고, 모드마다 5개이며, 장면마다 기본 방송이 다르다', async () => {
+test('[기능] 장면 11개: 이름·모토·바탕색·그림이 겹치지 않고, 아늑 6개·모험 5개이며, 장면마다 기본 방송이 다르다', async () => {
   const ids = MODES.flatMap(mode => mode.scenes)
 
-  expect(ids).toHaveLength(10)
-  expect(MODES.map(mode => mode.scenes.length)).toEqual([5, 5])
-  for (const field of ['title', 'motto', 'base'] as const) expect(new Set(ids.map(id => SCENES[id][field])).size, field).toBe(10)
-  expect(new Set(ids.map(id => SCENES[id].music.id)).size).toBe(10) // 장면마다 다른 방송으로 시작한다
-  expect(new Set(ids.map(id => ART[id].scene)).size).toBe(10) // 패널 그림이 모두 다르다
-  expect(new Set(ids.map(id => ART[id].strip)).size).toBe(10) // 배너 띠도 모두 다르다
+  expect(ids).toHaveLength(11)
+  expect(MODES.map(mode => mode.scenes.length)).toEqual([6, 5])
+  for (const field of ['title', 'motto', 'base'] as const) expect(new Set(ids.map(id => SCENES[id][field])).size, field).toBe(11)
+  expect(new Set(ids.map(id => SCENES[id].music.id)).size).toBe(11) // 장면마다 다른 방송으로 시작한다
+  expect(new Set(ids.map(id => ART[id].scene)).size).toBe(11) // 패널 그림이 모두 다르다
+  expect(new Set(ids.map(id => ART[id].strip)).size).toBe(11) // 배너 띠도 모두 다르다
   for (const id of ids) expect(SCENES[id].mode, id).toBe(MODES.find(mode => mode.scenes.includes(id))?.id) // 모드 표시와 장면 순서가 맞는다
 })
 
@@ -152,7 +152,7 @@ test('[기능] 방송 목록: 주소는 모두 http이고 승인한 서버뿐이
   expect(STATIONS).toHaveLength(16) // 장면의 기본 4곳 + 승인받은 12곳
   for (const station of STATIONS) expect(APPROVED_HOSTS, station.id).toContain(new URL(station.stream).hostname)
   for (const station of STATIONS) {
-    expect(station.stream, station.id).toMatch(/^http:\/\//) // Windows 재생기는 https를 못 연다
+    expect(station.stream, station.id).toMatch(/^http:\/\//) // 방송 주소는 아직 모두 http다(재생기는 https도 열지만 방송마다 확인한 뒤 바꾼다)
     expect(station.id, station.id).toMatch(/^[a-z0-9]+$/)
     expect(station.label.trim(), station.id).not.toBe('')
   }

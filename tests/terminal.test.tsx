@@ -149,7 +149,7 @@ test('[터미널] 패널 버튼: 음악·할 일·방송 바꾸기가 데스크�
   await pane.unmount()
 })
 
-test('[터미널] 그림 데이터: 장면 10개 모두 85x74 칸·팔레트 안의 번호·게이지 21단계·엠블럼 12x10이고, 게이지가 차면 그림이 달라진다', async () => {
+test('[터미널] 그림 데이터: 장면 11개 모두 85x74 칸·팔레트 안의 번호·게이지 21단계·엠블럼 12x10이고, 게이지가 차면 그림이 달라진다', async () => {
   expect(SYMBOLS).toHaveLength(89)
   for (const id of ids) {
     const cells = CELLS[id]

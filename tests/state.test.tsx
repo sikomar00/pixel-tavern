@@ -39,7 +39,7 @@ test('[상태] 음악: ▶는 이 장면의 방송을 켜고 ■는 끈다. 장�
     }
   })
   for (const id of MODES.flatMap(mode => mode.scenes)) {
-    expect(SCENES[id].music.stream, id).toMatch(/^http:\/\//) // Windows 재생기는 https를 못 연다
+    expect(SCENES[id].music.stream, id).toMatch(/^http:\/\//) // 방송 주소는 아직 모두 http다(재생기는 https도 열지만 방송마다 확인한 뒤 바꾼다)
   }
   await $.session.start({ cwd: 'C:/work/p', surface: 'desktop', isInteractive: true })
   await clock.settle()
