@@ -24,7 +24,7 @@ SCENES_TS = (ROOT / "hooks" / "scenes.ts").read_text(encoding="utf-8")
 
 def stations() -> list[tuple[str, str, str]]:
     """scenes.ts 의 방송 항목(id, label, stream)을 목록 순서대로 꺼낸다."""
-    return re.findall(r"id: '([a-z0-9]+)', label: '([^']+)', stream: '([^']+)'", SCENES_TS)
+    return re.findall(r"id: '([a-z0-9]+)', label: '([^']+)', short: '[^']+', group: '[a-z]+', stream: '([^']+)'", SCENES_TS)
 
 
 def check(name: str, url: str) -> bool:
